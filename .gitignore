@@ -1,0 +1,14 @@
+﻿# Dependencies
+node_modules/
+
+# Production Build
+dist/
+
+# Logs & Vite Cache
+*.log
+.vite/
+
+# Temporary / OS files
+.DS_Store
+Thumbs.db
+*.tmp
