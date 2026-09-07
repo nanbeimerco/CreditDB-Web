@@ -1,5 +1,5 @@
 /**
- * Tier表内の作品カード (Android版 TierAnimeCard.kt に完全準拠 + ドラッグ＆ドロップ対応)
+ * Tier表内の作品カード (Android版 TierAnimeCard.kt に完全準拠 + ドラッグ＆ドロップ対応 + 60fps軽量化)
  */
 import React, { useState } from 'react';
 import { TierAnimeItem } from '../../types/tier';
@@ -18,7 +18,7 @@ interface TierAnimeCardProps {
   onCardDragOver?: (e: React.DragEvent, rowId: string, targetIndex: number) => void;
 }
 
-export const TierAnimeCard: React.FC<TierAnimeCardProps> = ({
+const TierAnimeCardInternal: React.FC<TierAnimeCardProps> = ({
   anime,
   index,
   rowId,
@@ -55,7 +55,7 @@ export const TierAnimeCard: React.FC<TierAnimeCardProps> = ({
       onDragEnd={onDragEnd}
       onDragOver={handleDragOver}
       onClick={onClick}
-      className={`group relative flex-shrink-0 w-20 sm:w-24 rounded-xl overflow-hidden bg-surfaceContainer border transition-all duration-200 select-none cursor-grab active:cursor-grabbing ${
+      className={`group relative flex-shrink-0 w-20 sm:w-24 rounded-xl overflow-hidden bg-surfaceContainer border transition-[border-color,transform,opacity] duration-150 select-none cursor-grab active:cursor-grabbing ${
         isDragging
           ? 'opacity-30 scale-95 border-primary/60 shadow-inner ring-2 ring-primary/40'
           : 'border-outlineVariant/35 hover:border-primary/60 hover:shadow-lg hover:-translate-y-0.5'
@@ -68,8 +68,9 @@ export const TierAnimeCard: React.FC<TierAnimeCardProps> = ({
             src={anime.imageUrl}
             alt={title}
             onError={() => setImgError(true)}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
             loading="lazy"
+            decoding="async"
           />
         ) : (
           <div className="p-1.5 text-center text-[10px] font-bold text-onSurfaceVariant/80 leading-tight">
@@ -77,8 +78,8 @@ export const TierAnimeCard: React.FC<TierAnimeCardProps> = ({
           </div>
         )}
 
-        {/* 偏差値バッジ (左上: Gotham Bold) */}
-        <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur text-[9px] font-black text-white font-sans tracking-tight shadow">
+        {/* 偏差値バッジ (左上: Gotham Bold - GPU負荷の高いbackdrop-blurを廃止しAndroid準拠の高コントラストソリッド仕様に変更) */}
+        <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-[#111318]/90 text-[9px] font-black text-white font-sans tracking-tight shadow">
           {anime.deviationScore.toFixed(1)}
         </div>
 
@@ -109,3 +110,5 @@ export const TierAnimeCard: React.FC<TierAnimeCardProps> = ({
     </div>
   );
 };
+
+export const TierAnimeCard = React.memo(TierAnimeCardInternal);

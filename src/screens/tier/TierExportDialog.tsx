@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { TierTableConfig } from '../../types/tier';
 import { useLanguage } from '../../theme/languageManager';
 import { AppStrings } from '../../theme/strings';
-import { TierImageExportOptions, renderTierCanvas } from './tierImageRenderer';
+import { TierImageExportOptions, renderTierCanvas, calculateOptimalTierLayout } from './tierImageRenderer';
 import { TierAnalysisEngine } from './tierAnalysisEngine';
 import {
   Sliders,
@@ -12,7 +12,8 @@ import {
   Download,
   Upload,
   X,
-  Loader2
+  Loader2,
+  Maximize2
 } from 'lucide-react';
 
 interface TierExportDialogProps {
@@ -31,6 +32,7 @@ export const TierExportDialog: React.FC<TierExportDialogProps> = ({
   const { isEn } = useLanguage();
 
   const [selectedResolution, setSelectedResolution] = useState<'1080p' | '2K' | '4K'>('2K');
+  const [selectedAspectRatio, setSelectedAspectRatio] = useState<'4:3' | 'classic'>('4:3');
   const [showTitle, setShowTitle] = useState(true);
   const [showYear, setShowYear] = useState(true);
   const [showDevScore, setShowDevScore] = useState(false);
@@ -42,9 +44,16 @@ export const TierExportDialog: React.FC<TierExportDialogProps> = ({
       scale,
       showTitle,
       showYear,
-      showDeviationScore: showDevScore
+      showDeviationScore: showDevScore,
+      aspectRatio: selectedAspectRatio
     };
   };
+
+  const previewLayout = useMemo(() => {
+    const scale = selectedResolution === '1080p' ? 1.0 : selectedResolution === '4K' ? 2.5 : 1.6;
+    return calculateOptimalTierLayout(config, scale, selectedAspectRatio);
+  }, [config, selectedResolution, selectedAspectRatio]);
+
 
   // 1. 画像保存 (PNGダウンロード)
   const handleDownloadImage = async () => {
@@ -214,6 +223,50 @@ export const TierExportDialog: React.FC<TierExportDialogProps> = ({
                     </button>
                   );
                 })}
+              </div>
+            </div>
+
+            {/* アスペクト比選択 */}
+            <div className="pt-2 border-t border-outlineVariant/25">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs text-[var(--md-sys-color-on-surface-variant)] flex items-center gap-1 font-bold">
+                  <Maximize2 className="w-3.5 h-3.5 text-primary" />
+                  <span>{isEn ? "Aspect Ratio" : "画像の比率"}</span>
+                </label>
+                <span className="text-[10px] font-bold text-primary font-mono">
+                  {previewLayout.width} × {previewLayout.height} px
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedAspectRatio('4:3')}
+                  className={`py-1.5 px-2 text-xs font-bold rounded-xl border transition-all flex flex-col items-center ${
+                    selectedAspectRatio === '4:3'
+                      ? 'bg-[var(--md-sys-color-primary-container)] border-primary text-[var(--md-sys-color-on-primary-container)] shadow-sm'
+                      : 'border-outlineVariant/40 text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface)]'
+                  }`}
+                >
+                  <span>{isEn ? "4:3 (Auto Optimal)" : "4:3（自動最適化）"}</span>
+                  <span className="text-[9px] opacity-75 font-normal">
+                    {isEn ? "Balanced for SNS sharing" : "作品数に応じた構図調整"}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedAspectRatio('classic')}
+                  className={`py-1.5 px-2 text-xs font-bold rounded-xl border transition-all flex flex-col items-center ${
+                    selectedAspectRatio === 'classic'
+                      ? 'bg-[var(--md-sys-color-primary-container)] border-primary text-[var(--md-sys-color-on-primary-container)] shadow-sm'
+                      : 'border-outlineVariant/40 text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface)]'
+                  }`}
+                >
+                  <span>{isEn ? "Classic (Fixed Width)" : "固定幅 (1160px)"}</span>
+                  <span className="text-[9px] opacity-75 font-normal">
+                    {isEn ? "Traditional wide row" : "従来の標準横幅固定"}
+                  </span>
+                </button>
               </div>
             </div>
 

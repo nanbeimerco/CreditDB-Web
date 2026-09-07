@@ -5,6 +5,190 @@ export interface TierImageExportOptions {
   showTitle: boolean;
   showYear: boolean;
   showDeviationScore: boolean;
+  aspectRatio?: '4:3' | 'classic'; // デフォルトは '4:3' 自動最適化
+}
+
+export interface TierExportLayout {
+  width: number;
+  height: number;
+  cardsPerLine: number;
+  cardWidth: number;
+  cardHeight: number;
+  cardSpacing: number;
+  headerBoxWidth: number;
+  margin: number;
+  headerHeight: number;
+  rowSpacing: number;
+  cardStartX: number;
+  calculateRowHeight: (itemCount: number) => number;
+}
+
+/**
+ * 階層数や作品数に応じて、画像全体の比率が 4:3 に最も近づくよう
+ * 列数・寸法・キャンバスサイズをシミュレーションして自動決定する
+ */
+export function calculateOptimalTierLayout(
+  config: TierTableConfig,
+  s: number,
+  mode: '4:3' | 'classic' = '4:3'
+): TierExportLayout {
+  const margin = Math.round(20 * s);
+  const headerHeight = Math.round(56 * s);
+  const rowSpacing = Math.round(12 * s);
+  const headerBoxWidth = Math.round(118 * s);
+  const cardSpacing = Math.round(12 * s);
+  const gap = Math.round(16 * s);
+  const cardStartX = margin + headerBoxWidth + gap;
+
+  // クラシック固定幅モード (1160px基準)
+  if (mode === 'classic') {
+    const width = Math.round(1160 * s);
+    const cardWidth = Math.round(96 * s);
+    const cardHeight = Math.round(132 * s);
+    const availableWidthForCards = (width - margin) - cardStartX;
+    const cardsPerLine = Math.max(1, Math.floor((availableWidthForCards + cardSpacing) / (cardWidth + cardSpacing)));
+
+    const calculateRowHeight = (itemCount: number): number => {
+      if (itemCount === 0) return Math.round(156 * s);
+      const lines = Math.floor((itemCount - 1) / cardsPerLine) + 1;
+      return Math.round(24 * s + lines * cardHeight + (lines - 1) * cardSpacing);
+    };
+
+    const totalRowsHeight = config.rows.reduce((sum, r) => sum + calculateRowHeight(r.items.length), 0);
+    const height = Math.max(
+      Math.round(400 * s),
+      Math.round(headerHeight + totalRowsHeight + (config.rows.length * rowSpacing) + margin + 10 * s)
+    );
+
+    return {
+      width,
+      height,
+      cardsPerLine,
+      cardWidth,
+      cardHeight,
+      cardSpacing,
+      headerBoxWidth,
+      margin,
+      headerHeight,
+      rowSpacing,
+      cardStartX,
+      calculateRowHeight
+    };
+  }
+
+  // 4:3 最適化モード
+  const baseCardWidth = Math.round(96 * s);
+  const baseCardHeight = Math.round(132 * s);
+  const TARGET_RATIO = 4 / 3;
+
+  const maxItemsInRow = Math.max(...config.rows.map(r => r.items.length), 0);
+  const rowCount = Math.max(config.rows.length, 1);
+
+  // 走査候補の列数 (4列から最大16列)
+  const minCols = Math.max(4, Math.min(maxItemsInRow, 5));
+  const maxCols = Math.max(16, maxItemsInRow + 1);
+
+  let bestCols = 8;
+  let bestScore = Infinity;
+  let bestWidth = Math.round(1160 * s);
+  let bestHeight = Math.round(870 * s);
+
+  for (let c = minCols; c <= maxCols; c++) {
+    // 列数 c における各行の高さを計算
+    let currentRowsHeight = 0;
+    for (const r of config.rows) {
+      const lines = r.items.length === 0 ? 1 : Math.ceil(r.items.length / c);
+      const rh = 24 * s + lines * baseCardHeight + (lines - 1) * cardSpacing;
+      currentRowsHeight += rh;
+    }
+
+    const h = Math.max(
+      Math.round(400 * s),
+      Math.round(headerHeight + currentRowsHeight + (rowCount * rowSpacing) + margin + 10 * s)
+    );
+
+    // c 枚のカードを並べるために最低限必要な幅
+    const minW = Math.round(cardStartX + c * baseCardWidth + (c - 1) * cardSpacing + margin);
+    // 4:3 を達成するための理想幅
+    const idealW = Math.round(h * TARGET_RATIO);
+
+    // キャンバス幅: 理想幅が最低幅以上であれば理想幅を採用し比率4:3を維持
+    const w = Math.max(minW, idealW);
+    const ratio = w / h;
+
+    const ratioDiff = Math.abs(ratio - TARGET_RATIO);
+    const emptyRatio = Math.max(0, (w - minW) / w);
+    // スコア関数: 比率の近さを最優先し、同時に無駄な空き領域が広がりすぎない列数を最適解とする
+    const score = ratioDiff * 5 + emptyRatio * 1.8;
+
+    if (score < bestScore) {
+      bestScore = score;
+      bestCols = c;
+      bestWidth = w;
+      bestHeight = h;
+    }
+  }
+
+  const cardWidth = baseCardWidth;
+  const cardHeight = baseCardHeight;
+
+  const calculateRowHeight = (itemCount: number): number => {
+    if (itemCount === 0) return Math.round(156 * s);
+    const lines = Math.floor((itemCount - 1) / bestCols) + 1;
+    return Math.round(24 * s + lines * cardHeight + (lines - 1) * cardSpacing);
+  };
+
+  return {
+    width: bestWidth,
+    height: bestHeight,
+    cardsPerLine: bestCols,
+    cardWidth,
+    cardHeight,
+    cardSpacing,
+    headerBoxWidth,
+    margin,
+    headerHeight,
+    rowSpacing,
+    cardStartX,
+    calculateRowHeight
+  };
+}
+
+/**
+ * CSS の object-fit: cover と同等の中央クリップ画像描画
+ * 画像の元アスペクト比を100%維持し、縦横の潰れや引き伸ばしを根絶する
+ */
+export function drawImageCover(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  dx: number,
+  dy: number,
+  dw: number,
+  dh: number
+) {
+  const nw = img.naturalWidth || img.width;
+  const nh = img.naturalHeight || img.height;
+  if (nw <= 0 || nh <= 0) return;
+
+  const imgRatio = nw / nh;
+  const targetRatio = dw / dh;
+
+  let sx = 0;
+  let sy = 0;
+  let sw = nw;
+  let sh = nh;
+
+  if (imgRatio > targetRatio) {
+    // 画像が目標枠より横長: 左右を等しくトリミング
+    sw = nh * targetRatio;
+    sx = (nw - sw) / 2;
+  } else {
+    // 画像が目標枠より縦長: 上下を等しくトリミング
+    sh = nw / targetRatio;
+    sy = (nh - sh) / 2;
+  }
+
+  ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
 }
 
 /**
@@ -16,31 +200,23 @@ export async function renderTierCanvas(
   options: TierImageExportOptions
 ): Promise<HTMLCanvasElement> {
   const s = options.scale;
-  const baseRowHeight = 156 * s;
-  const headerHeight = 56 * s;
-  const margin = 20 * s;
-  const rowSpacing = 12 * s;
-  const width = Math.round(1160 * s);
+  const mode = options.aspectRatio || '4:3';
+  const layout = calculateOptimalTierLayout(config, s, mode);
 
-  const headerBoxWidth = 118 * s;
-  const cardWidth = 96 * s;
-  const cardHeight = baseRowHeight - 24 * s;
-  const cardSpacing = 12 * s;
-  const cardStartX = margin + headerBoxWidth + 16 * s;
-  const availableWidthForCards = (width - margin) - cardStartX;
-  const cardsPerLine = Math.max(1, Math.floor((availableWidthForCards + cardSpacing) / (cardWidth + cardSpacing)));
-
-  const calculateRowHeight = (itemCount: number): number => {
-    if (itemCount === 0) return baseRowHeight;
-    const lines = Math.floor((itemCount - 1) / cardsPerLine) + 1;
-    return 24 * s + lines * cardHeight + (lines - 1) * cardSpacing;
-  };
-
-  const totalRowsHeight = config.rows.reduce((sum, r) => sum + calculateRowHeight(r.items.length), 0);
-  const totalHeight = Math.max(
-    Math.round(400 * s),
-    Math.round(headerHeight + totalRowsHeight + (config.rows.length * rowSpacing) + margin + 10 * s)
-  );
+  const {
+    width,
+    height: totalHeight,
+    cardsPerLine,
+    cardWidth,
+    cardHeight,
+    cardSpacing,
+    headerBoxWidth,
+    margin,
+    headerHeight,
+    rowSpacing,
+    cardStartX,
+    calculateRowHeight
+  } = layout;
 
   // Gotham 等のフォント読み込み完了を確実に待機
   try {
@@ -164,10 +340,10 @@ function drawAnimeCard(
   ctx.fill();
   ctx.clip();
 
-  // カバー画像
+  // カバー画像 (drawImageCover でアスペクト比を完全維持)
   const img = item.imageUrl ? images.get(item.imageUrl) : null;
-  if (img && img.naturalWidth > 0) {
-    ctx.drawImage(img, x, y, w, h);
+  if (img && (img.naturalWidth > 0 || img.width > 0)) {
+    drawImageCover(ctx, img, x, y, w, h);
   } else {
     // プレースホルダーグラデーション
     const grad = ctx.createLinearGradient(x, y, x, y + h);
@@ -224,7 +400,7 @@ function drawAnimeCard(
 
     ctx.font = `bold ${Math.round(10 * s)}px "Gotham", "Noto Sans JP", -apple-system, sans-serif`;
     ctx.textBaseline = 'bottom';
-    
+
     // 省略記号対応
     const maxTextWidth = w - 12 * s;
     let titleStr = displayTitle;

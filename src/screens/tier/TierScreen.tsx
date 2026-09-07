@@ -61,38 +61,59 @@ export const TierScreen: React.FC<TierScreenProps> = ({
     }
   }, [snackbarMessage]);
 
-  const updateAndPersistConfig = (newConfig: TierTableConfig) => {
+  const updateAndPersistConfig = useCallback((newConfig: TierTableConfig) => {
     setConfig(newConfig);
     TierStorageManager.saveConfig(newConfig);
-  };
+  }, []);
+
+  // Stable Handlers for Row Actions & Navigation
+  const handleAnimeClick = useCallback((anime: TierAnimeItem) => {
+    onNavigateToWork(anime.id);
+  }, [onNavigateToWork]);
+
+  const handleAnimeAction = useCallback((anime: TierAnimeItem, r: TierRowData) => {
+    setSelectedAnimeForAction(anime);
+    setSelectedRowForAction(r);
+  }, []);
+
+  const handleAddAnimeClick = useCallback((r: TierRowData) => {
+    setTargetRowIdForSearch(r.id);
+    setShowSearchSheet(true);
+  }, []);
+
+  const handleToggleExpand = useCallback((rowId: string) => {
+    setExpandedRowIds(prev => {
+      const next = new Set(prev);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
+      return next;
+    });
+  }, []);
 
   // Drag and Drop Handlers
-  const handleDragStart = (_e: React.DragEvent, animeId: string, rowId: string) => {
+  const handleDragStart = useCallback((_e: React.DragEvent, animeId: string, rowId: string) => {
     setDragAnimeId(animeId);
     setDragFromRowId(rowId);
-  };
+  }, []);
 
-  const handleDragEnd = () => {
+  const handleDragEnd = useCallback(() => {
     setDragAnimeId(null);
     setDragFromRowId(null);
     setHoverRowId(null);
     setHoverIndex(null);
-  };
+  }, []);
 
-  const handleCardDragOver = (_e: React.DragEvent, rowId: string, targetIndex: number) => {
+  const handleCardDragOver = useCallback((_e: React.DragEvent, rowId: string, targetIndex: number) => {
     setHoverRowId(rowId);
     setHoverIndex(targetIndex);
-  };
+  }, []);
 
-  const handleRowDragOver = (_e: React.DragEvent, rowId: string) => {
+  const handleRowDragOver = useCallback((_e: React.DragEvent, rowId: string) => {
     setHoverRowId(rowId);
-    if (hoverRowId !== rowId) {
-      const row = config.rows.find(r => r.id === rowId);
-      setHoverIndex(row ? row.items.length : 0);
-    }
-  };
+    setHoverIndex(prev => prev);
+  }, []);
 
-  const handleRowDrop = (_e: React.DragEvent, targetRowId: string) => {
+  const handleRowDrop = useCallback((_e: React.DragEvent, targetRowId: string) => {
     if (!dragAnimeId || !dragFromRowId) {
       handleDragEnd();
       return;
@@ -146,7 +167,7 @@ export const TierScreen: React.FC<TierScreenProps> = ({
     }
 
     handleDragEnd();
-  };
+  }, [config, dragAnimeId, dragFromRowId, hoverIndex, handleDragEnd, updateAndPersistConfig]);
 
   // Aggregated Stats
   const totalRankedAnime = useMemo(() => {
@@ -161,15 +182,6 @@ export const TierScreen: React.FC<TierScreenProps> = ({
     ? (correlation.spearmanRho >= 0 ? `+${correlation.spearmanRho.toFixed(2)}` : correlation.spearmanRho.toFixed(2))
     : '--';
 
-  // Handlers for Row expansion
-  const handleToggleExpand = (rowId: string) => {
-    setExpandedRowIds(prev => {
-      const next = new Set(prev);
-      if (next.has(rowId)) next.delete(rowId);
-      else next.add(rowId);
-      return next;
-    });
-  };
 
   // Add work to row
   const handleAddAnimeToRow = (animeItem: TierAnimeItem, targetRowId: string) => {
@@ -338,7 +350,7 @@ export const TierScreen: React.FC<TierScreenProps> = ({
       </div>
 
       {/* 2. Tier Rows Main List */}
-      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 pb-24">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 pb-24 [transform:translateZ(0)] overscroll-contain">
         {config.rows.map(row => (
           <TierRowComponent
             key={row.id}
@@ -348,16 +360,10 @@ export const TierScreen: React.FC<TierScreenProps> = ({
             dragFromRowId={dragFromRowId}
             hoverRowId={hoverRowId}
             hoverIndex={hoverIndex}
-            onToggleExpand={() => handleToggleExpand(row.id)}
-            onAnimeClick={(anime) => onNavigateToWork(anime.id)}
-            onAnimeAction={(anime, r) => {
-              setSelectedAnimeForAction(anime);
-              setSelectedRowForAction(r);
-            }}
-            onAddAnimeClick={(r) => {
-              setTargetRowIdForSearch(r.id);
-              setShowSearchSheet(true);
-            }}
+            onToggleExpand={handleToggleExpand}
+            onAnimeClick={handleAnimeClick}
+            onAnimeAction={handleAnimeAction}
+            onAddAnimeClick={handleAddAnimeClick}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             onCardDragOver={handleCardDragOver}

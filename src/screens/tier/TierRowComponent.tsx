@@ -1,5 +1,5 @@
 /**
- * Tier行コンポーネント (Android版 TierRowComponent.kt に完全準拠 + DnD 挿入アニメーションスロット対応)
+ * Tier行コンポーネント (Android版 TierRowComponent.kt に完全準拠 + DnD 挿入アニメーションスロット対応 + 60fps軽量化)
  */
 import React from 'react';
 import { Plus, ChevronDown, ChevronUp } from 'lucide-react';
@@ -14,7 +14,7 @@ interface TierRowComponentProps {
   dragFromRowId: string | null;
   hoverRowId: string | null;
   hoverIndex: number | null;
-  onToggleExpand?: () => void;
+  onToggleExpand?: (rowId: string) => void;
   onAnimeClick: (anime: TierAnimeItem) => void;
   onAnimeAction: (anime: TierAnimeItem, row: TierRowData) => void;
   onAddAnimeClick: (row: TierRowData) => void;
@@ -25,7 +25,7 @@ interface TierRowComponentProps {
   onRowDrop: (e: React.DragEvent, rowId: string) => void;
 }
 
-export const TierRowComponent: React.FC<TierRowComponentProps> = ({
+const TierRowComponentInternal: React.FC<TierRowComponentProps> = ({
   row,
   isExpanded = false,
   dragAnimeId,
@@ -75,7 +75,11 @@ export const TierRowComponent: React.FC<TierRowComponentProps> = ({
     <div
       onDragOver={handleContainerDragOver}
       onDrop={handleContainerDrop}
-      className={`flex border rounded-2xl overflow-hidden bg-surfaceContainer/50 shadow-sm transition-all duration-200 ${
+      style={{
+        contentVisibility: 'auto',
+        containIntrinsicSize: isExpanded ? 'auto' : '0 160px'
+      }}
+      className={`flex border rounded-2xl overflow-hidden bg-surfaceContainer/50 shadow-sm transition-all duration-150 ${
         isTargetRow
           ? 'border-primary/60 ring-1 ring-primary/30 bg-surfaceContainer/80'
           : 'border-outlineVariant/35 hover:border-outlineVariant/60'
@@ -83,7 +87,7 @@ export const TierRowComponent: React.FC<TierRowComponentProps> = ({
     >
       {/* 行ヘッダー (左側) */}
       <div
-        onClick={onToggleExpand}
+        onClick={() => onToggleExpand?.(row.id)}
         className="w-16 sm:w-20 flex-shrink-0 flex flex-col items-center justify-center p-2 text-center select-none cursor-pointer hover:opacity-95 transition-opacity"
         style={{ backgroundColor: row.colorHex }}
         title={isExpanded ? (isEn ? "Collapse row" : "1行表示に戻す") : (isEn ? "Expand row" : "全作品を展開表示")}
@@ -147,3 +151,5 @@ export const TierRowComponent: React.FC<TierRowComponentProps> = ({
     </div>
   );
 };
+
+export const TierRowComponent = React.memo(TierRowComponentInternal);
