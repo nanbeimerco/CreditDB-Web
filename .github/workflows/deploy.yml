@@ -3,10 +3,13 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  schedule:
+    # 毎週月曜日 00:00 UTC (日本時間 09:00) に自動更新
+    - cron: '0 0 * * 1'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -20,6 +23,32 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run Weekly CreditDB Auto-Updater
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          python scripts/weekly_updater.py
+
+      - name: Commit and push updated database
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/data/creditdb.db.gz public/data/version.json
+          if ! git diff --staged --quiet; then
+            git commit -m "Auto-update CreditDB data [skip ci]"
+            git push
+          else
+            echo "No database changes to commit."
+          fi
 
       - name: Set up Node.js 20
         uses: actions/setup-node@v4
@@ -44,3 +73,4 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
