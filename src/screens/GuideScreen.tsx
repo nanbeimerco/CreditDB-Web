@@ -1,5 +1,5 @@
 /**
- * 数理解説ガイド画面 (Android版 GuideScreen.kt に完全準拠)
+ * 数理解説ガイド画面 (誠実・客観的かつ敬意ある表現に推敲済み)
  */
 import React from 'react';
 import { ArrowLeft } from 'lucide-react';
@@ -14,7 +14,6 @@ interface GuideScreenProps {
 export const GuideScreen: React.FC<GuideScreenProps> = (props) => {
   const onBackClick = props.onBackClick || props.onBack || (() => {});
   const isEn = LanguageManager.isEnglish;
-
 
   return (
     <div className="flex flex-col h-full bg-background select-none overflow-y-auto">
@@ -47,27 +46,27 @@ export const GuideScreen: React.FC<GuideScreenProps> = (props) => {
 
           <p>
             {isEn
-              ? 'CreditDB curates public ratings into three core metrics: Standard Score (Deviation), Raw Score (AniList), and Quality Tier, allowing intuitive understanding of each work’s relative standing.'
-              : 'CreditDB では、誰でも直感的に作品の評価を把握できるよう、公開指標を「偏差値」「AniList素点」「Tier」の3点に厳選して表示しています。'}
+              ? 'CreditDB organizes public audience ratings into three core metrics: Standard Score (Deviation), Raw Score (AniList), and Quality Tier, helping users intuitively grasp each work’s relative standing.'
+              : 'CreditDB では、作品の評価傾向を直感的に把握できるよう、公開指標を「偏差値」「AniList素点」「Tier」の3点に整理して表示しています。'}
           </p>
 
           {/* 偏差値カード */}
           <div className="p-3.5 rounded-2xl bg-surfaceContainer border border-outlineVariant/40 space-y-2">
             <div className="font-bold text-primary text-xs">
-              {isEn ? '📊 Standard Score (Era-Relative Quality)' : '📊 偏差値（年代相対クオリティ）'}
+              {isEn ? '📊 Standard Score (Era-Relative Benchmark)' : '📊 偏差値（年代相対スコア）'}
             </div>
             <p>
               {isEn
-                ? 'Measures how prominently a title stood out among anime released in the same era, standardized to a mean of 50.0 and standard deviation of 10.0 using statistical Z-scores.'
-                : '「その作品が公開された年代のアニメ群の中で、どれだけ突出して評価されたか」を、統計的な標準偏差単位で算出し、平均を 50.0、標準偏差を 10.0 に規格化した指標です。'}
+                ? 'Measures where a title was situated among anime released around the same era, standardized to a mean of 50.0 and standard deviation of 10.0 using statistical Z-scores.'
+                : '「その作品が公開された年代のアニメ作品群の中で、どのような相対的評価位置にあったか」を統計的な標準偏差単位で算出し、平均 50.0、標準偏差 10.0 に標準化した指標です。'}
             </p>
             <div className="p-2 rounded-lg bg-surfaceVariant/60 font-mono text-center text-[11px] font-bold text-onSurface">
               偏差値 = 50.0 + 10.0 × Z_i
             </div>
             <p className="text-[10px] text-onSurfaceVariant/80">
               {isEn
-                ? '※ Since Z_i eliminates inflation and deflation across eras, 1980s classics and 2020s hits can be compared fairly side-by-side.'
-                : '※ 年代ごとのインフレ・デフレが完全に補正されているため、1980年代の名作も2020年代の話題作も公平に横並び比較できます。'}
+                ? '※ By adjusting for era-specific score distributions, works from different decades can be referenced on a consistent relative benchmark.'
+                : '※ 年代ごとのスコア分布（インフレ・デフレ傾向）を平準化しているため、公開時期が異なる作品同士でも相対的な評価水準を比較しやすくなっています。'}
             </p>
           </div>
 
@@ -115,24 +114,24 @@ export const GuideScreen: React.FC<GuideScreenProps> = (props) => {
               2
             </span>
             <h3 className="text-sm font-bold text-onSurface">
-              {isEn ? 'Two-Stage Normalization (Zi)' : '年代補正Z値（Z_i）の二段階数理モデル'}
+              {isEn ? 'Two-Stage Normalization Model (Zi)' : '年代補正Z値（Z_i）の二段階数理モデル'}
             </h3>
           </div>
 
           <p>
             {isEn
-              ? 'Raw review scores contain severe systematic biases: modern internet score inflation and reviewer self-selection biases. CreditDB solves this with a two-stage mathematical pipeline.'
-              : 'ネット上のレビュー点数には、「近年のインフレ傾向」「熱心なファンしか投票しないマイナー作のバイアス」が存在します。CreditDB は二段階の数理モデルでこれらを完全に除去しています。'}
+              ? 'Raw review scores often reflect systematic factors such as era-dependent score inflation and reviewer selection tendencies. CreditDB applies a two-stage statistical approach to adjust for and mitigate these variances.'
+              : 'ネット上のレビュー点数には、「近年のスコアインフレ傾向」や「作品ごとの投票者層の偏り（選択バイアス）」などの系統的な影響が含まれがちです。CreditDB では二段階の数理処理を適用することで、これらの偏りを統計的に緩和・調整しています。'}
           </p>
 
           <div className="p-3.5 rounded-2xl bg-surfaceContainer border border-outlineVariant/40 space-y-2">
             <div className="font-bold text-primary text-xs">
-              {isEn ? 'Step 1: Item-User Bias ALS Decomposition' : '第1段階: ユーザー・作品バイアス分解 (ALS)'}
+              {isEn ? 'Step 1: Item-User Bias Decomposition (ALS)' : '第1段階: ユーザー・作品バイアス分解 (ALS)'}
             </div>
             <p>
               {isEn
-                ? 'Decomposes raw ratings into global mean, reviewer optimism bias (c_u), and intrinsic work quality (b_i).'
-                : '観測されたスコアを全体平均、ユーザーの甘口・辛口バイアス、作品本来の実力クオリティ（b_i）に交互最小二乗法（ALS）で分解します。'}
+                ? 'Decomposes observed ratings into a global mean, reviewer rating tendencies (c_u), and work-specific rating components (b_i) using Alternating Least Squares (ALS).'
+                : '観測されたスコアから、全体のベース水準やレビュアーごとの採点傾向（甘口・辛口バイアス c_u）を分離し、作品固有の評価成分（b_i）を交互最小二乗法（ALS）により推計します。'}
             </p>
             <div className="p-2 rounded-lg bg-surfaceVariant/60 font-mono text-center text-[11px] font-bold text-onSurface">
               r_ui = μ + c_u + b_i + ε_ui
@@ -141,12 +140,12 @@ export const GuideScreen: React.FC<GuideScreenProps> = (props) => {
 
           <div className="p-3.5 rounded-2xl bg-surfaceContainer border border-outlineVariant/40 space-y-2">
             <div className="font-bold text-primary text-xs">
-              {isEn ? 'Step 2: Local Moving-Window Standardization' : '第2段階: 年代局所移動窓による標準化 (Z_i)'}
+              {isEn ? 'Step 2: Local Moving-Window Standardization (Z_i)' : '第2段階: 年代局所移動窓による標準化 (Z_i)'}
             </div>
             <p>
               {isEn
-                ? 'Standardizes b_i using rolling mean and standard deviation over release eras, yielding scale-free, comparable Z-scores.'
-                : '各公開年の前後を含む移動窓を用いて、年代ごとの期待値とバラつきを標準偏差単位へ変換し、時代を超越して比較可能な真のZ値（Z_i）を算出します。'}
+                ? 'Standardizes work components (b_i) against rolling window statistics across release years to yield era-adjusted relative Z-scores (Z_i).'
+                : '各公開年の前後を含む移動窓を用いて、年代ごとの平均値とばらつきに基づいて標準化を行い、時代間での相対的な立ち位置を示すZ値（Z_i）を算出します。'}
             </p>
             <div className="p-2 rounded-lg bg-surfaceVariant/60 font-mono text-center text-[11px] font-bold text-onSurface">
               Z_i = (b_i − μ_era) / σ_era
@@ -155,7 +154,7 @@ export const GuideScreen: React.FC<GuideScreenProps> = (props) => {
         </section>
 
         {/* ========================================== */}
-        {/* 第3章: 制作陣・声優の能力評価モデル */}
+        {/* 第3章: 制作陣・声優のクレジット分析モデル */}
         {/* ========================================== */}
         <section className="space-y-3">
           <div className="flex items-center gap-2 border-b border-outlineVariant/40 pb-2">
@@ -163,24 +162,24 @@ export const GuideScreen: React.FC<GuideScreenProps> = (props) => {
               3
             </span>
             <h3 className="text-sm font-bold text-onSurface">
-              {isEn ? 'Creator & Cast Evaluation Model' : '制作陣・声優の能力評価モデル'}
+              {isEn ? 'Creator & Cast Statistical Metric Model' : '制作陣・声優のクレジット分析モデル'}
             </h3>
           </div>
 
           <p>
             {isEn
-              ? 'Measures creator capability through two complementary dual axes: Empirical Power Score S(a) and Lifetime Career Contribution ΣZ.'
-              : 'クリエイターの能力は、「1作あたりの平均的なクオリティの高さ（総合実力）」と「長年のキャリアを通じた通算の貢献総量（生涯累積実績）」の2軸で多角的に評価されます。'}
+              ? 'Creator and cast profiles are summarized through two complementary statistical perspectives: the Bayesian Rating S(a) reflecting average work reception, and Lifetime Cumulative Impact ΣZ reflecting career breadth.'
+              : '制作陣・声優の参加作品における評価傾向や活動実績は、「関与作品における平均的な評価水準（ベイズ推定レーティング）」と「キャリアを通じた通算の参加実績（生涯累積Z値）」の2つの統計的視点から客観的に可視化しています。'}
           </p>
 
           <div className="p-3.5 rounded-2xl bg-surfaceContainer border border-outlineVariant/40 space-y-2">
             <div className="font-bold text-primary text-xs">
-              {isEn ? '🎯 Power Score S(a) (Empirical Bayesian Shrinkage)' : '🎯 総合実力 S(a)（経験的ベイズ平滑化）'}
+              {isEn ? '🎯 Bayesian Rating S(a) (Empirical Bayesian Shrinkage)' : '🎯 ベイズ推定レーティング S(a)（経験的ベイズ平滑化）'}
             </div>
             <p>
               {isEn
-                ? 'Applies empirical Bayesian shrinkage to prevent lucky 1-hit creators from dominating rankings while honoring consistent high performance.'
-                : '参加本数が少ないクリエイターの上振れ・下振れを防ぐため、部門ごとの事前分布中央値へ平滑化し、安定して傑作を生み出し続ける真の実力を測定します。'}
+                ? 'Applies empirical Bayesian shrinkage to moderate statistical outliers from small sample sizes toward role-specific baselines, providing a stable indicator of average work reception.'
+                : '参加作品数が少ない場合の統計的な極端値（少数の作品による過大・過小推計）を抑えるため、担当役職全体の事前分布に向けて平滑化を行い、継続的・安定的な評価水準を客観的に推計する指標です。'}
             </p>
             <div className="p-2 rounded-lg bg-surfaceVariant/60 font-mono text-center text-[11px] font-bold text-onSurface">
               S(a) = (n × Z_mean + m_role × Z_prior) / (n + m_role)
@@ -189,12 +188,12 @@ export const GuideScreen: React.FC<GuideScreenProps> = (props) => {
 
           <div className="p-3.5 rounded-2xl bg-surfaceContainer border border-outlineVariant/40 space-y-2">
             <div className="font-bold text-primary text-xs">
-              {isEn ? '🏛️ Career Cumulative ΣZ (Total Era Impact)' : '🏛️ 生涯累積実績 ΣZ（通算キャリア貢献量）'}
+              {isEn ? '🏛️ Career Cumulative Impact ΣZ (Lifetime Credit Volume)' : '🏛️ 生涯累積実績 ΣZ（通算キャリア実績量）'}
             </div>
             <p>
               {isEn
-                ? 'Sum of all positive era-adjusted contributions across a career, honoring industry veterans who built the anime landscape.'
-                : '長年アニメ業界を支え続け、無数の作品で確かなクオリティを刻み込んできたベテランや大功労者を讃えるための生涯通算指標です。'}
+                ? 'Aggregates positive era-adjusted evaluations across a career, reflecting the cumulative volume and reception of credited creative works.'
+                : '長年にわたり多数の作品に携わり、アニメーション文化を支えてきた制作陣・声優の活動実績と、関与作品が獲得してきた評価の蓄積を通算値として算出する指標です。'}
             </p>
             <div className="p-2 rounded-lg bg-surfaceVariant/60 font-mono text-center text-[11px] font-bold text-onSurface">
               ΣZ = ∑ max(0, Z_i)

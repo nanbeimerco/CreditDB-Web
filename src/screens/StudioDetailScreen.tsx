@@ -83,8 +83,8 @@ export const StudioDetailScreen: React.FC<StudioDetailScreenProps> = (props) => 
           {/* 理念注記 */}
           <div className="p-2.5 rounded-xl bg-surfaceContainer border border-outlineVariant/30 text-[11px] text-onSurfaceVariant leading-relaxed">
             {isEn
-              ? '※ Rooted in creator individualism, our mathematical model values individual human talent and does not compute aggregate power or cumulative ratings for corporate studio entities.'
-              : '※ 本アプリの数理評価モデルはクリエイター個人（人間）を重視する理念に基づき、スタジオへの総合実力・累計実績等の数理算出は行っていません。'}
+              ? '※ Focusing on individual staff and cast credits, our analytical model does not compute composite ratings or cumulative indices for corporate studio entities.'
+              : '※ 本アプリの数理分析モデルは制作スタッフ個人のクレジットに主眼を置いているため、スタジオ単位でのレーティング推計や累計指標の算出は行っていません。'}
           </div>
         </div>
 
