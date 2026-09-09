@@ -394,96 +394,106 @@ export const CreditRepository = {
 
     // スタジオ役職
     if (role === 'studio') {
-      const conditions: string[] = [];
-      const args: any[] = [];
-      if (query.trim()) {
-        const qNorm = normalizeText(query.trim());
-        const hasLatin = /[a-zA-Z]/.test(query);
-        const matchedStudios = hasLatin ? StaffNameResolver.searchStudiosByRomaji(query.trim()) : [];
-        if (matchedStudios.length > 0) {
-          const ph = matchedStudios.map(() => '?').join(',');
-          conditions.push(`(name_norm LIKE ? OR name IN (${ph}))`);
-          args.push(`%${qNorm}%`, ...matchedStudios);
-        } else {
-          conditions.push('name_norm LIKE ?');
-          args.push(`%${qNorm}%`);
+      try {
+        const conditions: string[] = [];
+        const args: any[] = [];
+        if (query.trim()) {
+          const qNorm = normalizeText(query.trim());
+          const hasLatin = /[a-zA-Z]/.test(query);
+          const matchedStudios = hasLatin ? StaffNameResolver.searchStudiosByRomaji(query.trim()) : [];
+          if (matchedStudios.length > 0) {
+            const ph = matchedStudios.map(() => '?').join(',');
+            conditions.push(`(name_norm LIKE ? OR name IN (${ph}))`);
+            args.push(`%${qNorm}%`, ...matchedStudios);
+          } else {
+            conditions.push('name_norm LIKE ?');
+            args.push(`%${qNorm}%`);
+          }
         }
-      }
-      const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
-      const sql = `
-        SELECT name, works_count, best_work_title, best_work_year, best_work_dev, best_work_tier
-        FROM studios ${whereClause} ORDER BY works_count DESC LIMIT ? OFFSET ?
-      `;
-      args.push(limit, offset);
-      const res = db.exec(sql, args);
-      const list: LeaderboardItem[] = [];
-      let rank = offset + 1;
-      if (res.length > 0) {
-        for (const row of res[0].values) {
-          const bwTitle = row[2] ? String(row[2]) : null;
-          list.push({
-            role: 'studio',
-            name: String(row[0]),
-            worksCount: Number(row[1]),
-            rating: 0.0,
-            cumulativeZ: 0.0,
-            ratingRank: rank,
-            cumulativeRank: rank,
-            ratingTier: String(row[5] || 'B'),
-            cumulativeTier: 'B',
-            bestWorkTitle: bwTitle,
-            bestWorkTitleEn: bwTitle ? titleToEnMap[bwTitle] || null : null,
-            bestWorkYear: row[3] ? Number(row[3]) : null,
-            bestWorkZ: row[4] !== null ? Number(row[4]) : null
-          });
-          rank++;
+        const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+        const sql = `
+          SELECT name, works_count, best_work_title, best_work_year, best_work_dev, best_work_tier
+          FROM studios ${whereClause} ORDER BY works_count DESC LIMIT ? OFFSET ?
+        `;
+        args.push(limit, offset);
+        const res = db.exec(sql, args);
+        const list: LeaderboardItem[] = [];
+        let rank = offset + 1;
+        if (res.length > 0) {
+          for (const row of res[0].values) {
+            const bwTitle = row[2] ? String(row[2]) : null;
+            list.push({
+              role: 'studio',
+              name: String(row[0]),
+              worksCount: Number(row[1]),
+              rating: 0.0,
+              cumulativeZ: 0.0,
+              ratingRank: rank,
+              cumulativeRank: rank,
+              ratingTier: String(row[5] || 'B'),
+              cumulativeTier: 'B',
+              bestWorkTitle: bwTitle,
+              bestWorkTitleEn: bwTitle ? titleToEnMap[bwTitle] || null : null,
+              bestWorkYear: row[3] ? Number(row[3]) : null,
+              bestWorkZ: row[4] !== null ? Number(row[4]) : null
+            });
+            rank++;
+          }
         }
+        return list;
+      } catch (e) {
+        console.error('Failed to query studios leaderboard:', e);
+        return [];
       }
-      return list;
     }
 
     // 全役職で検索クエリがある場合、マッチするスタジオを先頭に統合
     const matchedStudios: LeaderboardItem[] = [];
     if (role === 'all' && query.trim() && offset === 0) {
-      const qNorm = normalizeText(query.trim());
-      const hasLatin = /[a-zA-Z]/.test(query);
-      const matchedStudioNames = hasLatin ? StaffNameResolver.searchStudiosByRomaji(query.trim()) : [];
-      const stConditions: string[] = [];
-      const stArgs: any[] = [];
-      if (matchedStudioNames.length > 0) {
-        const ph = matchedStudioNames.map(() => '?').join(',');
-        stConditions.push(`(name_norm LIKE ? OR name IN (${ph}))`);
-        stArgs.push(`%${qNorm}%`, ...matchedStudioNames);
-      } else {
-        stConditions.push('name_norm LIKE ?');
-        stArgs.push(`%${qNorm}%`);
-      }
-      const stSql = `
-        SELECT name, works_count, best_work_title, best_work_year, best_work_dev, best_work_tier
-        FROM studios WHERE ${stConditions.join(' AND ')} ORDER BY works_count DESC LIMIT 3
-      `;
-      const stRes = db.exec(stSql, stArgs);
-      if (stRes.length > 0) {
-        for (const row of stRes[0].values) {
-          const bwTitle = row[2] ? String(row[2]) : null;
-          matchedStudios.push({
-            role: 'studio',
-            name: String(row[0]),
-            worksCount: Number(row[1]),
-            rating: 0.0,
-            cumulativeZ: 0.0,
-            ratingRank: 0,
-            cumulativeRank: 0,
-            ratingTier: String(row[5] || 'B'),
-            cumulativeTier: 'B',
-            bestWorkTitle: bwTitle,
-            bestWorkTitleEn: bwTitle ? titleToEnMap[bwTitle] || null : null,
-            bestWorkYear: row[3] ? Number(row[3]) : null,
-            bestWorkZ: row[4] !== null ? Number(row[4]) : null
-          });
+      try {
+        const qNorm = normalizeText(query.trim());
+        const hasLatin = /[a-zA-Z]/.test(query);
+        const matchedStudioNames = hasLatin ? StaffNameResolver.searchStudiosByRomaji(query.trim()) : [];
+        const stConditions: string[] = [];
+        const stArgs: any[] = [];
+        if (matchedStudioNames.length > 0) {
+          const ph = matchedStudioNames.map(() => '?').join(',');
+          stConditions.push(`(name_norm LIKE ? OR name IN (${ph}))`);
+          stArgs.push(`%${qNorm}%`, ...matchedStudioNames);
+        } else {
+          stConditions.push('name_norm LIKE ?');
+          stArgs.push(`%${qNorm}%`);
         }
+        const stSql = `
+          SELECT name, works_count, best_work_title, best_work_year, best_work_dev, best_work_tier
+          FROM studios WHERE ${stConditions.join(' AND ')} ORDER BY works_count DESC LIMIT 3
+        `;
+        const stRes = db.exec(stSql, stArgs);
+        if (stRes.length > 0) {
+          for (const row of stRes[0].values) {
+            const bwTitle = row[2] ? String(row[2]) : null;
+            matchedStudios.push({
+              role: 'studio',
+              name: String(row[0]),
+              worksCount: Number(row[1]),
+              rating: 0.0,
+              cumulativeZ: 0.0,
+              ratingRank: 0,
+              cumulativeRank: 0,
+              ratingTier: String(row[5] || 'B'),
+              cumulativeTier: 'B',
+              bestWorkTitle: bwTitle,
+              bestWorkTitleEn: bwTitle ? titleToEnMap[bwTitle] || null : null,
+              bestWorkYear: row[3] ? Number(row[3]) : null,
+              bestWorkZ: row[4] !== null ? Number(row[4]) : null
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Failed to query matched studios:', e);
       }
     }
+
 
     const conditions: string[] = ['role = ?'];
     const args: any[] = [role];
@@ -542,26 +552,32 @@ export const CreditRepository = {
   getLeaderboardCount(role: string = 'all', query: string = ''): number {
     const db = getDatabase();
     if (role === 'studio') {
-      const conditions: string[] = [];
-      const args: any[] = [];
-      if (query.trim()) {
-        const qNorm = normalizeText(query.trim());
-        const hasLatin = /[a-zA-Z]/.test(query);
-        const matchedStudios = hasLatin ? StaffNameResolver.searchStudiosByRomaji(query.trim()) : [];
-        if (matchedStudios.length > 0) {
-          const ph = matchedStudios.map(() => '?').join(',');
-          conditions.push(`(name_norm LIKE ? OR name IN (${ph}))`);
-          args.push(`%${qNorm}%`, ...matchedStudios);
-        } else {
-          conditions.push('name_norm LIKE ?');
-          args.push(`%${qNorm}%`);
+      try {
+        const conditions: string[] = [];
+        const args: any[] = [];
+        if (query.trim()) {
+          const qNorm = normalizeText(query.trim());
+          const hasLatin = /[a-zA-Z]/.test(query);
+          const matchedStudios = hasLatin ? StaffNameResolver.searchStudiosByRomaji(query.trim()) : [];
+          if (matchedStudios.length > 0) {
+            const ph = matchedStudios.map(() => '?').join(',');
+            conditions.push(`(name_norm LIKE ? OR name IN (${ph}))`);
+            args.push(`%${qNorm}%`, ...matchedStudios);
+          } else {
+            conditions.push('name_norm LIKE ?');
+            args.push(`%${qNorm}%`);
+          }
         }
+        const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+        const sql = `SELECT count(*) FROM studios ${whereClause}`;
+        const res = db.exec(sql, args);
+        return res.length > 0 && res[0].values.length > 0 ? Number(res[0].values[0][0]) : 0;
+      } catch (e) {
+        console.error('Failed to count studios:', e);
+        return 0;
       }
-      const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
-      const sql = `SELECT count(*) FROM studios ${whereClause}`;
-      const res = db.exec(sql, args);
-      return res.length > 0 && res[0].values.length > 0 ? Number(res[0].values[0][0]) : 0;
     }
+
 
     const conditions: string[] = ['role = ?'];
     const args: any[] = [role];
@@ -806,30 +822,36 @@ export const CreditRepository = {
   },
 
   getStudioWorks(studioName: string): StudioWorkItem[] {
-    const db = getDatabase();
-    const [workIdToEnMap] = getWorkTitleEnMaps();
+    try {
+      const db = getDatabase();
+      const [workIdToEnMap] = getWorkTitleEnMaps();
 
-    const sql = `
-      SELECT work_id, title, year, deviation_score, tier
-      FROM studio_works WHERE studio_name = ? ORDER BY year DESC
-    `;
-    const res = db.exec(sql, [studioName]);
-    const list: StudioWorkItem[] = [];
-    if (res.length > 0) {
-      for (const row of res[0].values) {
-        const wid = String(row[0]);
-        list.push({
-          workId: wid,
-          title: String(row[1]),
-          year: Number(row[2]),
-          deviationScore: Number(row[3]),
-          tier: String(row[4]),
-          titleEn: workIdToEnMap[wid] || null
-        });
+      const sql = `
+        SELECT work_id, title, year, deviation_score, tier
+        FROM studio_works WHERE studio_name = ? ORDER BY year DESC
+      `;
+      const res = db.exec(sql, [studioName]);
+      const list: StudioWorkItem[] = [];
+      if (res.length > 0) {
+        for (const row of res[0].values) {
+          const wid = String(row[0]);
+          list.push({
+            workId: wid,
+            title: String(row[1]),
+            year: Number(row[2]),
+            deviationScore: Number(row[3]),
+            tier: String(row[4]),
+            titleEn: workIdToEnMap[wid] || null
+          });
+        }
       }
+      return list;
+    } catch (e) {
+      console.error('Failed to get studio works:', e);
+      return [];
     }
-    return list;
   },
+
 
   getStaffCandidates(role: string, query: string, limit: number = 20): StaffCandidate[] {
     const db = getDatabase();
