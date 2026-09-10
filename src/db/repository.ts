@@ -119,8 +119,108 @@ function buildStaffSummary(staffJsonStr: string, charJsonStr: string): string {
 
 function cleanStudio(studioList: StaffCredit[] | undefined): string | null {
   if (!studioList || studioList.length === 0) return null;
-  const name = studioList[0].name.trim();
-  return name.length > 0 ? name : null;
+  const names = studioList.map(s => s.name.trim()).filter(n => n.length > 0);
+  if (names.length === 0) return null;
+
+  const joinedAll = names.join(" ");
+  const joinedUpper = joinedAll.toUpperCase();
+
+  // スタジオジブリ
+  if (joinedUpper.includes("GHIBLI") || joinedAll.includes("ジブリ") || joinedAll.includes("吉卜力")) {
+    return "スタジオジブリ";
+  }
+
+  // MADHOUSE
+  if (
+    names.some(n => n.toUpperCase() === "MAD") ||
+    joinedUpper.includes("MADHOUSE") ||
+    joinedAll.includes("マッドハウス")
+  ) {
+    return "MADHOUSE";
+  }
+
+  // スタジオ地図
+  if (joinedUpper.includes("CHIZU") || joinedAll.includes("スタジオ地図")) {
+    return "スタジオ地図";
+  }
+
+  // WIT STUDIO
+  if (
+    (names.some(n => n.toUpperCase() === "WIT") && names.some(n => n.toUpperCase() === "STUDIO")) ||
+    joinedUpper.startsWith("WIT")
+  ) {
+    return "WIT STUDIO";
+  }
+
+  // WHITE FOX
+  if (
+    (names.some(n => n.toUpperCase() === "WHITE") && names.some(n => n.toUpperCase() === "FOX")) ||
+    joinedUpper.includes("WHITE FOX")
+  ) {
+    return "WHITE FOX";
+  }
+
+  // ライデンフィルム
+  if (
+    (names.some(n => n.toUpperCase() === "LIDEN") && names.some(n => n.toUpperCase() === "FILMS")) ||
+    joinedAll.includes("ライデンフィルム") ||
+    joinedUpper.includes("LIDENFILMS")
+  ) {
+    return "ライデンフィルム";
+  }
+
+  if (joinedUpper.includes("MAPPA")) return "MAPPA";
+  if (joinedUpper.includes("UFOTABLE") || joinedAll.includes("ユーフォーテーブル")) return "ufotable";
+  if (joinedUpper.includes("BONES") || joinedAll.includes("ボンズ")) return "ボンズ";
+  if (joinedUpper.includes("CLOVERWORKS") || joinedAll.includes("クローバーワークス")) return "CloverWorks";
+  if (joinedUpper.includes("KYOTO") || joinedAll.includes("京都") || joinedAll.includes("京アニ")) return "京都アニメーション";
+  if (joinedUpper.includes("SHAFT") || joinedAll.includes("シャフト")) return "シャフト";
+  if (joinedUpper.includes("SUNRISE") || joinedAll.includes("サンライズ")) return "サンライズ";
+  if (joinedUpper.includes("TRIGGER") || joinedAll.includes("トリガー")) return "TRIGGER";
+  if (joinedUpper.includes("A-1") || joinedUpper.includes("A1")) return "A-1 Pictures";
+  if (joinedUpper.includes("J.C.STAFF") || joinedUpper.includes("JCSTAFF") || joinedUpper.includes("J.C.")) return "J.C.STAFF";
+  if (joinedUpper.includes("P.A.WORKS") || joinedUpper.includes("PAWORKS") || joinedUpper.includes("P.A.")) return "P.A.WORKS";
+  if (joinedUpper.includes("TOEI") || joinedAll.includes("東映")) return "東映アニメーション";
+  if (joinedUpper.includes("PIERROT") || joinedAll.includes("ぴえろ")) return "スタジオぴえろ";
+  if (joinedUpper.includes("TMS") || joinedAll.includes("トムス")) return "トムス・エンタテインメント";
+  if (joinedUpper.includes("DOGA KOBO") || joinedAll.includes("動画工房")) return "動画工房";
+  if (joinedUpper.includes("SILVER LINK") || joinedAll.includes("シルバーリンク")) return "SILVER LINK.";
+  if (joinedUpper.includes("KINEMA CITRUS") || joinedAll.includes("キネマシトラス")) return "キネマシトラス";
+  if (joinedUpper.includes("PRODUCTION I.G") || joinedUpper.includes("PRODUCTION IG") || joinedAll.includes("プロダクションI.G") || joinedAll.includes("プロダクション・アイジー")) return "Production I.G";
+  if (joinedUpper.includes("SCIENCE SARU") || joinedAll.includes("サイエンスSARU")) return "サイエンスSARU";
+  if (joinedUpper.includes("STUDIO DEEN") || joinedAll.includes("スタジオディーン") || joinedUpper.includes("DEEN")) return "スタジオディーン";
+  if (joinedUpper.includes("OLM")) return "OLM";
+  if (joinedUpper.includes("AIC")) return "AIC";
+  if (joinedUpper.includes("GONZO")) return "GONZO";
+  if (joinedUpper.includes("XEBEC") || joinedAll.includes("ジーベック")) return "XEBEC";
+  if (joinedUpper.includes("TROYCA") || joinedAll.includes("トロイカ")) return "TROYCA";
+  if (joinedUpper.includes("LERCHE") || joinedAll.includes("ラルケ")) return "Lerche";
+  if (joinedUpper.includes("COMIX WAVE") || joinedAll.includes("コミックス・ウェーブ")) return "コミックス・ウェーブ・フィルム";
+  if (joinedUpper.includes("FEEL") || joinedAll.includes("feel.")) return "feel.";
+  if (joinedUpper.includes("TATSUNOKO") || joinedAll.includes("タツノコ")) return "タツノコプロ";
+  if (joinedUpper.includes("GAINAX") || joinedAll.includes("ガイナックス")) return "GAINAX";
+  if (joinedUpper.includes("DAVID") || joinedAll.includes("デイヴィッドプロダクション")) return "david production";
+  if (joinedAll.includes("スタジオバインド") || joinedUpper.includes("STUDIO BIND")) return "スタジオバインド";
+  if (joinedAll.includes("スタジオヴォルン") || joinedUpper.includes("VOLN")) return "スタジオヴォルン";
+  if (joinedAll.includes("Nexus") || joinedUpper.includes("NEXUS")) return "Nexus";
+  if (joinedAll.includes("C-Station") || joinedUpper.includes("C STATION")) return "C-Station";
+  if (joinedAll.includes("テレコム")) return "テレコム・アニメーションフィルム";
+  if (joinedAll.includes("シンエイ動画")) return "シンエイ動画";
+  if (joinedAll.includes("日本アニメーション")) return "日本アニメーション";
+
+  const noise = new Set([
+    "振付", "人名", "配角", "Triple", "ON", "PRODUCTION", "Production", "Kim", "Pictures",
+    "フジテレビ", "テレビ朝日", "TBS", "日本テレビ", "テレビ東京", "NHK", "TOKYO MX", "MBS", "BS11", "AT-X",
+    "松倉友二", "大月俊倫", "丸山正雄", "植田益朗", "川村元気", "読売広告社", "電通", "博報堂", "アニプレックス"
+  ]);
+  const filtered = names.filter(n => !noise.has(n) && n.length > 1 && !n.startsWith("第"));
+  if (filtered.length === 0) return null;
+
+  const candidate = filtered[0];
+  const bad = ["振付", "音響", "監督", "原画", "デザイン", "編集", "美術", "制作進行", "テレビ", "放送"];
+  if (bad.some(b => candidate.includes(b))) return null;
+
+  return candidate;
 }
 
 export const CreditRepository = {

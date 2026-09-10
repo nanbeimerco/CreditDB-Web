@@ -229,13 +229,16 @@ export async function initializeDatabase(
       onProgress?.(60, 'キャッシュからデータベースを起動中...');
       try {
         currentDb = new sqlStatic.Database(cachedBytes);
-        // Schema check: verify that studios table exists
+        // Schema & version check: verify that studios table exists AND total_works >= 20000
         const checkStudios = currentDb.exec("SELECT 1 FROM sqlite_master WHERE type='table' AND name='studios'");
-        if (checkStudios.length > 0 && checkStudios[0].values.length > 0) {
+        const checkWorks = currentDb.exec("SELECT total_works FROM summary LIMIT 1");
+        const totalWorks = (checkWorks.length > 0 && checkWorks[0].values.length > 0) ? Number(checkWorks[0].values[0][0]) : 0;
+
+        if (checkStudios.length > 0 && checkStudios[0].values.length > 0 && totalWorks >= 20000) {
           onProgress?.(100, '起動完了');
           return currentDb;
         } else {
-          console.warn('Cached DB lacks studios table. Refetching latest database from server...');
+          console.warn(`Cached DB is outdated (totalWorks=${totalWorks}). Refetching latest database from server...`);
           currentDb.close();
           currentDb = null;
         }
