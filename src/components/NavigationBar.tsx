@@ -3,11 +3,11 @@
  * ※ 予測編成(Predict)は指示に基づき完全に除外
  */
 import React from 'react';
-import { Film, Trophy, BarChart3 } from 'lucide-react';
+import { Film, Trophy, BarChart3, Camera } from 'lucide-react';
 import { LanguageManager } from '../theme/languageManager';
 import { AppStrings } from '../theme/strings';
 
-export type MainTabType = 'works' | 'staff' | 'tier';
+export type MainTabType = 'works' | 'staff' | 'tier' | 'scene';
 
 interface NavigationBarProps {
   currentTab: MainTabType;
@@ -36,6 +36,11 @@ export const NavigationBar: React.FC<NavigationBarProps> = ({ currentTab, onTabC
       id: 'tier',
       label: isEn ? AppStrings.navTier : 'Tier表',
       icon: BarChart3
+    },
+    {
+      id: 'scene',
+      label: isEn ? AppStrings.navScene : 'シーン特定',
+      icon: Camera
     }
   ];
 
@@ -56,6 +61,13 @@ export const NavigationBar: React.FC<NavigationBarProps> = ({ currentTab, onTabC
         <span className="inline-flex items-center justify-center">
           <span className="font-['Gotham'] font-bold tracking-tight text-[11px] mr-0.5">Tier</span>
           <span>表</span>
+        </span>
+      );
+    }
+    if (id === 'scene') {
+      return (
+        <span className="inline-flex items-center justify-center">
+          <span>シーン特定</span>
         </span>
       );
     }

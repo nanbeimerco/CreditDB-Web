@@ -3,7 +3,7 @@
  * ※ メインコンテンツと重ならず、画面左端に常時独立配置
  */
 import React from 'react';
-import { Film, Trophy, BarChart3, Globe, Palette, Database, HelpCircle } from 'lucide-react';
+import { Film, Trophy, BarChart3, Camera, Globe, Palette, Database, HelpCircle } from 'lucide-react';
 import { MainTabType } from './NavigationBar';
 import { LanguageManager } from '../theme/languageManager';
 import { AppStrings } from '../theme/strings';
@@ -46,6 +46,11 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
       id: 'tier',
       label: isEn ? AppStrings.navTier : 'Tier表',
       icon: BarChart3
+    },
+    {
+      id: 'scene',
+      label: isEn ? AppStrings.navScene : 'シーン特定',
+      icon: Camera
     }
   ];
 
@@ -66,6 +71,13 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
         <span className="inline-flex items-center justify-center">
           <span className="font-['Gotham'] font-bold tracking-tight text-[11px] mr-0.5">Tier</span>
           <span>表</span>
+        </span>
+      );
+    }
+    if (id === 'scene') {
+      return (
+        <span className="inline-flex items-center justify-center">
+          <span>シーン特定</span>
         </span>
       );
     }

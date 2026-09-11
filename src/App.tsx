@@ -16,6 +16,7 @@ import { StaffDetailScreen } from './screens/StaffDetailScreen';
 import { StudioDetailScreen } from './screens/StudioDetailScreen';
 import { GuideScreen } from './screens/GuideScreen';
 import { TierScreen } from './screens/tier/TierScreen';
+import { SceneSearchScreen } from './screens/SceneSearchScreen';
 import { useLanguage } from './theme/languageManager';
 import { Database, AlertCircle, RefreshCw } from 'lucide-react';
 
@@ -85,6 +86,23 @@ export const App: React.FC = () => {
   useEffect(() => {
     initializeApp();
   }, [initializeApp]);
+
+  // グローバルな画像貼り付けリスナー: どこにいても画像がペーストされたらシーン特定タブへ誘導
+  useEffect(() => {
+    const handleGlobalPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          setActiveTab('scene');
+          setScreenStack([]);
+          break;
+        }
+      }
+    };
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => window.removeEventListener('paste', handleGlobalPaste);
+  }, []);
 
   // Stack Navigation Handlers
   const pushWork = (workId: string) => {
@@ -228,6 +246,12 @@ export const App: React.FC = () => {
                 onNavigateToWork={pushWork}
                 onNavigateToStaff={pushStaff}
                 onNavigateToStudio={pushStudio}
+              />
+            </div>
+
+            <div className={`flex-1 flex flex-col h-full overflow-hidden ${activeTab === 'scene' ? 'block' : 'hidden'}`}>
+              <SceneSearchScreen
+                onNavigateToWork={pushWork}
               />
             </div>
 
