@@ -78,7 +78,7 @@ const TierAnimeCardInternal: React.FC<TierAnimeCardProps> = ({
           </div>
         )}
 
-        {/* 偏差値バッジ (左上: Gotham Bold - GPU負荷の高いbackdrop-blurを廃止しAndroid準拠の高コントラストソリッド仕様に変更) */}
+        {/* 偏差値バッジ (左上: Montserrat Bold - GPU負荷の高いbackdrop-blurを廃止しAndroid準拠の高コントラストソリッド仕様に変更) */}
         <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-[#111318]/90 text-[9px] font-black text-white font-sans tracking-tight shadow">
           {anime.deviationScore.toFixed(1)}
         </div>

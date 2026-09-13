@@ -46,20 +46,20 @@ export const NavigationBar: React.FC<NavigationBarProps> = ({ currentTab, onTabC
 
   const renderTabLabel = (id: MainTabType, defaultLabel: string) => {
     if (isEn) {
-      return <span className="font-['Gotham']">{defaultLabel}</span>;
+      return <span className="font-['Montserrat']">{defaultLabel}</span>;
     }
     if (id === 'works') {
       return (
         <span className="inline-flex items-center justify-center">
           <span>作品</span>
-          <span className="font-['Gotham'] font-bold tracking-tight text-[11px] ml-0.5">DB</span>
+          <span className="font-['Montserrat'] font-bold tracking-tight text-[11px] ml-0.5">DB</span>
         </span>
       );
     }
     if (id === 'tier') {
       return (
         <span className="inline-flex items-center justify-center">
-          <span className="font-['Gotham'] font-bold tracking-tight text-[11px] mr-0.5">Tier</span>
+          <span className="font-['Montserrat'] font-bold tracking-tight text-[11px] mr-0.5">Tier</span>
           <span>表</span>
         </span>
       );

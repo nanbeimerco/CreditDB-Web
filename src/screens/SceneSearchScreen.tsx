@@ -336,7 +336,7 @@ export const SceneSearchScreen: React.FC<SceneSearchScreenProps> = ({ onNavigate
                 {/* 一致率バッジ (左上オーバーレイ) */}
                 <div className="absolute top-3 left-3 px-2.5 py-1 bg-black/75 backdrop-blur rounded-full flex items-center gap-1.5 border border-white/20">
                   <CheckCircle2 className={`w-3.5 h-3.5 ${activeResult.similarity >= 0.87 ? 'text-emerald-400' : 'text-amber-400'}`} />
-                  <span className="text-xs font-black text-white font-['Gotham']">
+                  <span className="text-xs font-black text-white font-['Montserrat']">
                     {(activeResult.similarity * 100).toFixed(1)}% {isEn ? 'Match' : '一致'}
                   </span>
                 </div>
@@ -350,10 +350,10 @@ export const SceneSearchScreen: React.FC<SceneSearchScreenProps> = ({ onNavigate
                     {matchedWork && (
                       <>
                         <TierBadge tier={matchedWork.tier} />
-                        <span className="text-xs font-bold text-primary font-['Gotham']">
+                        <span className="text-xs font-bold text-primary font-['Montserrat']">
                           {isEn ? `Dev: ${matchedWork.deviationScore.toFixed(1)}` : `偏差値 ${matchedWork.deviationScore.toFixed(1)}`}
                         </span>
-                        <span className="text-xs text-onSurfaceVariant font-['Gotham']">
+                        <span className="text-xs text-onSurfaceVariant font-['Montserrat']">
                           ({matchedWork.year})
                         </span>
                         {matchedWork.studio && (
@@ -401,7 +401,7 @@ export const SceneSearchScreen: React.FC<SceneSearchScreenProps> = ({ onNavigate
                       <div className="text-[10px] text-onSurfaceVariant font-bold uppercase">
                         {isEn ? AppStrings.sceneTimeEn : AppStrings.sceneTime}
                       </div>
-                      <div className="text-sm font-extrabold text-onSurface font-['Gotham']">
+                      <div className="text-sm font-extrabold text-onSurface font-['Montserrat']">
                         {formatTimestamp(activeResult.at)}
                         <span className="text-[11px] font-normal text-onSurfaceVariant ml-1">
                           ({formatTimestamp(activeResult.from)} - {formatTimestamp(activeResult.to)})
@@ -464,14 +464,14 @@ export const SceneSearchScreen: React.FC<SceneSearchScreenProps> = ({ onNavigate
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[11px] font-black text-primary font-['Gotham']">
+                            <span className="text-[11px] font-black text-primary font-['Montserrat']">
                               {(item.similarity * 100).toFixed(1)}%
                             </span>
                             <span className="text-[11px] font-bold text-onSurface truncate">
                               {item.episode !== null ? `第${item.episode}話` : '映画/単発'}
                             </span>
                           </div>
-                          <div className="text-[10px] text-onSurfaceVariant font-['Gotham']">
+                          <div className="text-[10px] text-onSurfaceVariant font-['Montserrat']">
                             {formatTimestamp(item.at)}
                           </div>
                         </div>

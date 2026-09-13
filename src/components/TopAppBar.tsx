@@ -24,7 +24,7 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
     <header className="sticky top-0 z-30 flex items-center justify-between h-14 px-4 bg-background/95 backdrop-blur border-b border-outlineVariant/30 select-none">
       {/* タイトル (PROなし) */}
       <div className="flex items-center gap-2">
-        <span className="text-lg font-black tracking-tight text-onSurface font-['Gotham']">
+        <span className="text-lg font-black tracking-tight text-onSurface font-['Montserrat']">
           CreditDB
         </span>
       </div>

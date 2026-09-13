@@ -35,8 +35,8 @@ export default {
         DEFAULT: 'rgba(68, 71, 70, 0.35)',
       },
       fontFamily: {
-        sans: ['Gotham', '"Noto Sans JP"', 'system-ui', '-apple-system', 'sans-serif'],
-        mono: ['Gotham', '"Noto Sans JP"', 'sans-serif'],
+        sans: ['Montserrat', '"Noto Sans JP"', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['Montserrat', '"Noto Sans JP"', 'sans-serif'],
       }
     },
   },

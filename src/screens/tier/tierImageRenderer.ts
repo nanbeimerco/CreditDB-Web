@@ -218,15 +218,15 @@ export async function renderTierCanvas(
     calculateRowHeight
   } = layout;
 
-  // Gotham 等のフォント読み込み完了を確実に待機
+  // Montserrat 等のフォント読み込み完了を確実に待機
   try {
     if (typeof document !== 'undefined' && 'fonts' in document) {
       await Promise.all([
-        document.fonts.load(`bold ${Math.round(24 * s)}px "Gotham"`),
-        document.fonts.load(`bold ${Math.round(38 * s)}px "Gotham"`),
-        document.fonts.load(`bold ${Math.round(10 * s)}px "Gotham"`),
-        document.fonts.load(`bold ${Math.round(9.5 * s)}px "Gotham"`),
-        document.fonts.load(`normal ${Math.round(9 * s)}px "Gotham"`),
+        document.fonts.load(`bold ${Math.round(24 * s)}px "Montserrat"`),
+        document.fonts.load(`bold ${Math.round(38 * s)}px "Montserrat"`),
+        document.fonts.load(`bold ${Math.round(10 * s)}px "Montserrat"`),
+        document.fonts.load(`bold ${Math.round(9.5 * s)}px "Montserrat"`),
+        document.fonts.load(`normal ${Math.round(9 * s)}px "Montserrat"`),
         document.fonts.ready
       ]);
     }
@@ -246,7 +246,7 @@ export async function renderTierCanvas(
 
   // 2. ウォーターマーク (右上: CreditDB)
   ctx.fillStyle = '#FFFFFF';
-  ctx.font = `bold ${Math.round(24 * s)}px "Gotham", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+  ctx.font = `bold ${Math.round(24 * s)}px "Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
   ctx.fillText('CreditDB', width - margin - 4 * s, 32 * s);
@@ -300,7 +300,7 @@ export async function renderTierCanvas(
     // Tier文字
     ctx.fillStyle = '#121218';
     const tierFontSize = row.name.length > 2 ? Math.round(26 * s) : Math.round(38 * s);
-    ctx.font = `bold ${tierFontSize}px "Gotham", -apple-system, BlinkMacSystemFont, sans-serif`;
+    ctx.font = `bold ${tierFontSize}px "Montserrat", -apple-system, BlinkMacSystemFont, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(row.name, margin + headerBoxWidth / 2, currentY + rowHeight / 2);
@@ -365,7 +365,7 @@ function drawAnimeCard(
   // 偏差値バッジ (右上)
   if (options.showDeviationScore && item.deviationScore != null) {
     const scoreText = item.deviationScore.toFixed(1);
-    ctx.font = `bold ${Math.round(10 * s)}px "Gotham", -apple-system, sans-serif`;
+    ctx.font = `bold ${Math.round(10 * s)}px "Montserrat", -apple-system, sans-serif`;
     const textWidth = ctx.measureText(scoreText).width;
     const badgeW = textWidth + 8 * s;
     const badgeH = 16 * s;
@@ -388,7 +388,7 @@ function drawAnimeCard(
 
   if (options.showYear && item.year) {
     ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.font = `bold ${Math.round(9.5 * s)}px "Gotham", -apple-system, sans-serif`;
+    ctx.font = `bold ${Math.round(9.5 * s)}px "Montserrat", -apple-system, sans-serif`;
     ctx.textBaseline = 'bottom';
     ctx.fillText(String(item.year), x + 6 * s, textY);
     textY -= 12 * s;
@@ -398,7 +398,7 @@ function drawAnimeCard(
     const displayTitle = (isEn && item.titleEn) ? item.titleEn : (item.title || item.titleEn || '');
     ctx.fillStyle = '#FFFFFF';
 
-    ctx.font = `bold ${Math.round(10 * s)}px "Gotham", "Noto Sans JP", -apple-system, sans-serif`;
+    ctx.font = `bold ${Math.round(10 * s)}px "Montserrat", "Noto Sans JP", -apple-system, sans-serif`;
     ctx.textBaseline = 'bottom';
 
     // 省略記号対応

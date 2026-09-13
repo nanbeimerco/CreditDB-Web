@@ -143,7 +143,7 @@ export const App: React.FC = () => {
           </div>
 
           <div>
-            <h1 className="text-2xl font-black tracking-tight text-onBackground font-['Gotham']">
+            <h1 className="text-2xl font-black tracking-tight text-onBackground font-['Montserrat']">
               CreditDB
             </h1>
             <p className="text-xs text-onSurfaceVariant mt-1">

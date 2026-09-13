@@ -56,20 +56,20 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
 
   const renderTabLabel = (id: MainTabType, defaultLabel: string) => {
     if (isEn) {
-      return <span className="font-['Gotham']">{defaultLabel}</span>;
+      return <span className="font-['Montserrat']">{defaultLabel}</span>;
     }
     if (id === 'works') {
       return (
         <span className="inline-flex items-center justify-center">
           <span>作品</span>
-          <span className="font-['Gotham'] font-bold tracking-tight text-[11px] ml-0.5">DB</span>
+          <span className="font-['Montserrat'] font-bold tracking-tight text-[11px] ml-0.5">DB</span>
         </span>
       );
     }
     if (id === 'tier') {
       return (
         <span className="inline-flex items-center justify-center">
-          <span className="font-['Gotham'] font-bold tracking-tight text-[11px] mr-0.5">Tier</span>
+          <span className="font-['Montserrat'] font-bold tracking-tight text-[11px] mr-0.5">Tier</span>
           <span>表</span>
         </span>
       );
@@ -88,7 +88,7 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
     <aside className="hidden md:flex flex-col w-[76px] flex-shrink-0 h-full bg-surfaceContainer border-r border-outlineVariant/30 select-none py-3 items-center justify-between z-30">
       {/* 1. 上部: ブランドタイトル (Proなし・ロゴなし) */}
       <div className="flex flex-col items-center justify-center pt-2 pb-1 w-full">
-        <span className="text-[13px] font-black tracking-tight text-primary font-['Gotham'] select-none">
+        <span className="text-[13px] font-black tracking-tight text-primary font-['Montserrat'] select-none">
           CreditDB
         </span>
       </div>
@@ -116,7 +116,7 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
               >
                 <Icon className="w-5 h-5" />
               </div>
-              {/* ラベル (DB と Tier は Gotham フォントで確実に描画) */}
+              {/* ラベル (DB と Tier は Montserrat フォントで確実に描画) */}
               <span
                 className={`text-[11px] mt-1 font-medium transition-colors text-center whitespace-nowrap ${
                   isSelected ? 'text-primary font-bold' : 'text-onSurfaceVariant group-hover:text-onSurface'
