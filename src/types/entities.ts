@@ -190,3 +190,17 @@ export interface StaffCandidate {
   topCharacter?: string | null;
 }
 
+export interface StudioStaffMember {
+  name: string;
+  totalWorks: number;
+  weightedScore: number;
+  rolesBreakdown: Record<string, number>;
+  primaryRoles: string[];
+  ratingTier: string | null;
+  cumulativeTier: string | null;
+  sampleWorks: string[];
+  firstYear?: number;
+  lastYear?: number;
+}
+
+

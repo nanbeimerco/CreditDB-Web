@@ -284,6 +284,7 @@ export const App: React.FC = () => {
                       studioName={sub.name}
                       onBack={handleBack}
                       onNavigateToWork={pushWork}
+                      onNavigateToStaff={pushStaff}
                     />
                   )}
                   {sub.type === 'guide' && (

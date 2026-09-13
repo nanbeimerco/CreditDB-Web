@@ -14,6 +14,7 @@ import {
   BestWork,
   CareerTrajectoryItem,
   StudioWorkItem,
+  StudioStaffMember,
   StaffCandidate,
   WorksSortOption,
   StaffSortOption
@@ -1144,6 +1145,196 @@ export const CreditRepository = {
       return list;
     } catch (e) {
       console.error('Failed to get studio works:', e);
+      return [];
+    }
+  },
+
+  getStudioStaff(studioName: string): StudioStaffMember[] {
+    try {
+      const db = getDatabase();
+
+      const sql = `
+        SELECT work_id, title, year, deviation_score, staff_json, characters_json
+        FROM works
+        WHERE work_id IN (SELECT work_id FROM studio_works WHERE studio_name = ?)
+      `;
+      const res = db.exec(sql, [studioName]);
+      if (res.length === 0) return [];
+
+      const ROLE_WEIGHTS: Record<string, number> = {
+        director: 4.0,
+        series_comp: 3.0,
+        char_design: 3.0,
+        sakkan: 2.0,
+        unit_director: 2.0,
+        art_dir: 1.5,
+        music: 1.5,
+        genga: 1.0,
+        cv: 0.8
+      };
+
+      interface TempStaffData {
+        name: string;
+        weightedScore: number;
+        rolesBreakdown: Record<string, number>;
+        distinctWorks: Set<string>;
+        worksList: { title: string; year: number; score: number }[];
+        firstYear: number;
+        lastYear: number;
+      }
+
+      const staffMap = new Map<string, TempStaffData>();
+
+      for (const row of res[0].values) {
+        const wid = String(row[0]);
+        const title = String(row[1]);
+        const year = Number(row[2]) || 0;
+        const score = Number(row[3]) || 50.0;
+        const staffJson = String(row[4] || '');
+        const charsJson = String(row[5] || '');
+
+        if (staffJson) {
+          try {
+            const sMap = JSON.parse(staffJson);
+            for (const [role, members] of Object.entries(sMap)) {
+              if (role === 'studio') continue;
+              const mList = Array.isArray(members) ? members : [members];
+              const weight = ROLE_WEIGHTS[role] || 0.5;
+
+              for (const m of mList) {
+                const name = typeof m === 'object' && m !== null ? ((m as any).name || '') : String(m || '');
+                const cleanName = name.trim();
+                if (!cleanName) continue;
+
+                let data = staffMap.get(cleanName);
+                if (!data) {
+                  data = {
+                    name: cleanName,
+                    weightedScore: 0,
+                    rolesBreakdown: {},
+                    distinctWorks: new Set<string>(),
+                    worksList: [],
+                    firstYear: year || 9999,
+                    lastYear: year || 0
+                  };
+                  staffMap.set(cleanName, data);
+                }
+
+                data.weightedScore += weight;
+                data.rolesBreakdown[role] = (data.rolesBreakdown[role] || 0) + 1;
+                data.distinctWorks.add(wid);
+                data.worksList.push({ title, year, score });
+                if (year > 0) {
+                  if (year < data.firstYear) data.firstYear = year;
+                  if (year > data.lastYear) data.lastYear = year;
+                }
+              }
+            }
+          } catch {}
+        }
+
+        if (charsJson) {
+          try {
+            const cList = JSON.parse(charsJson);
+            if (Array.isArray(cList)) {
+              for (const cr of cList) {
+                const aName = (cr.actor_name || cr.actor || '').trim();
+                if (!aName) continue;
+
+                let data = staffMap.get(aName);
+                if (!data) {
+                  data = {
+                    name: aName,
+                    weightedScore: 0,
+                    rolesBreakdown: {},
+                    distinctWorks: new Set<string>(),
+                    worksList: [],
+                    firstYear: year || 9999,
+                    lastYear: year || 0
+                  };
+                  staffMap.set(aName, data);
+                }
+
+                data.weightedScore += ROLE_WEIGHTS['cv'];
+                data.rolesBreakdown['cv'] = (data.rolesBreakdown['cv'] || 0) + 1;
+                data.distinctWorks.add(wid);
+                data.worksList.push({ title, year, score });
+                if (year > 0) {
+                  if (year < data.firstYear) data.firstYear = year;
+                  if (year > data.lastYear) data.lastYear = year;
+                }
+              }
+            }
+          } catch {}
+        }
+      }
+
+      if (staffMap.size === 0) return [];
+
+      // Leaderboards から Tier を一括取得
+      const allNames = Array.from(staffMap.keys());
+      const tierMap = new Map<string, { ratingTier: string; cumTier: string }>();
+
+      const chunkSize = 300;
+      for (let i = 0; i < allNames.length; i += chunkSize) {
+        const chunk = allNames.slice(i, i + chunkSize);
+        const ph = chunk.map(() => '?').join(',');
+        const lbSql = `SELECT name, rating_tier, cumulative_tier FROM leaderboards WHERE role = 'all' AND name IN (${ph})`;
+        const lbRes = db.exec(lbSql, chunk);
+        if (lbRes.length > 0) {
+          for (const r of lbRes[0].values) {
+            tierMap.set(String(r[0]), {
+              ratingTier: String(r[1] || 'B'),
+              cumTier: String(r[2] || 'B')
+            });
+          }
+        }
+      }
+
+      const result: StudioStaffMember[] = [];
+      for (const [name, data] of staffMap.entries()) {
+        const tiers = tierMap.get(name);
+
+        // 主な役職を重み順・回数順にソート
+        const sortedRoles = Object.entries(data.rolesBreakdown)
+          .sort((a, b) => {
+            const wA = (ROLE_WEIGHTS[a[0]] || 0.5) * a[1];
+            const wB = (ROLE_WEIGHTS[b[0]] || 0.5) * b[1];
+            return wB - wA;
+          })
+          .map(([r]) => r);
+
+        // 代表作 (最高偏差値順に重複を除いて最大3作)
+        const seenTitles = new Set<string>();
+        const sampleWorks: string[] = [];
+        const sortedWorks = [...data.worksList].sort((a, b) => b.score - a.score);
+        for (const w of sortedWorks) {
+          if (!seenTitles.has(w.title)) {
+            seenTitles.add(w.title);
+            sampleWorks.push(w.title);
+            if (sampleWorks.length >= 3) break;
+          }
+        }
+
+        result.push({
+          name,
+          totalWorks: data.distinctWorks.size,
+          weightedScore: Math.round(data.weightedScore * 10) / 10,
+          rolesBreakdown: data.rolesBreakdown,
+          primaryRoles: sortedRoles,
+          ratingTier: tiers?.ratingTier || null,
+          cumulativeTier: tiers?.cumTier || null,
+          sampleWorks,
+          firstYear: data.firstYear < 9999 ? data.firstYear : undefined,
+          lastYear: data.lastYear > 0 ? data.lastYear : undefined
+        });
+      }
+
+      // デフォルトは重み付けスコア順
+      result.sort((a, b) => b.weightedScore - a.weightedScore);
+      return result;
+    } catch (e) {
+      console.error('Failed to get studio staff:', e);
       return [];
     }
   },
