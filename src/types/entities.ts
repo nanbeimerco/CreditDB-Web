@@ -99,6 +99,8 @@ export interface LeaderboardItem {
   bestWorkZ?: number | null;
   topCharacter?: string | null;
   bestWorkTitleEn?: string | null;
+  firstYear?: number | null;
+  latestYear?: number | null;
 }
 
 export interface RoleStat {
@@ -161,7 +163,8 @@ export type WorksSortOption =
   | 'YEAR_ASC'
   | 'TITLE_ASC';
 
-export type StaffSortOption = 'RATING' | 'CUMULATIVE';
+export type StaffSortOption = 'RATING' | 'CUMULATIVE' | 'NEWEST_DEBUT' | 'OLDEST_DEBUT' | 'WORKS_COUNT';
+export type DebutEraFilter = 'all' | '2020s' | '2015plus' | '2010s' | '2000s' | 'pre2000';
 
 export const ROLE_ORDER = [
   'director',

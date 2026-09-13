@@ -3,7 +3,7 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowUpDown, ChevronRight } from 'lucide-react';
-import { LeaderboardItem, StaffSortOption, RoleType, ROLE_ORDER } from '../types/entities';
+import { LeaderboardItem, StaffSortOption, RoleType, ROLE_ORDER, DebutEraFilter } from '../types/entities';
 import { CreditRepository } from '../db/repository';
 import { SmartSearchBar, DualTierBadge, RoleBadge } from '../components/CommonComponents';
 import { TierTheme } from '../theme/tierTheme';
@@ -18,6 +18,17 @@ interface StaffScreenProps {
   onNavigateToStudio?: (studioName: string) => void;
 }
 
+const getDebutYearRange = (filter: DebutEraFilter): [number | undefined, number | undefined] => {
+  switch (filter) {
+    case '2020s': return [2020, undefined];
+    case '2015plus': return [2015, undefined];
+    case '2010s': return [2010, 2019];
+    case '2000s': return [2000, 2009];
+    case 'pre2000': return [undefined, 1999];
+    default: return [undefined, undefined];
+  }
+};
+
 export const StaffScreen: React.FC<StaffScreenProps> = (props) => {
   const onStaffClick = props.onStaffClick || props.onNavigateToStaff || (() => {});
   const onStudioClick = props.onStudioClick || props.onNavigateToStudio || (() => {});
@@ -25,6 +36,7 @@ export const StaffScreen: React.FC<StaffScreenProps> = (props) => {
   const [items, setItems] = useState<LeaderboardItem[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [selectedRole, setSelectedRole] = useState<RoleType>('all');
+  const [debutEra, setDebutEra] = useState<DebutEraFilter>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortOption, setSortOption] = useState<StaffSortOption>('RATING');
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -36,14 +48,17 @@ export const StaffScreen: React.FC<StaffScreenProps> = (props) => {
   const loadInitialItems = useCallback(() => {
     setIsLoading(true);
     try {
+      const [debutMin, debutMax] = getDebutYearRange(debutEra);
       const data = CreditRepository.getLeaderboard(
         selectedRole,
         searchQuery,
         sortOption,
         50,
-        0
+        0,
+        debutMin,
+        debutMax
       );
-      const count = CreditRepository.getLeaderboardCount(selectedRole, searchQuery);
+      const count = CreditRepository.getLeaderboardCount(selectedRole, searchQuery, debutMin, debutMax);
       setItems(data);
       setTotalCount(count);
     } catch (e) {
@@ -51,7 +66,7 @@ export const StaffScreen: React.FC<StaffScreenProps> = (props) => {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedRole, searchQuery, sortOption]);
+  }, [selectedRole, searchQuery, sortOption, debutEra]);
 
   useEffect(() => {
     loadInitialItems();
@@ -63,12 +78,15 @@ export const StaffScreen: React.FC<StaffScreenProps> = (props) => {
       setIsLoadingMore(true);
       setTimeout(() => {
         try {
+          const [debutMin, debutMax] = getDebutYearRange(debutEra);
           const more = CreditRepository.getLeaderboard(
             selectedRole,
             searchQuery,
             sortOption,
             50,
-            items.length
+            items.length,
+            debutMin,
+            debutMax
           );
           setItems((prev) => [...prev, ...more]);
         } catch (err) {
@@ -78,10 +96,6 @@ export const StaffScreen: React.FC<StaffScreenProps> = (props) => {
         }
       }, 100);
     }
-  };
-
-  const toggleSort = () => {
-    setSortOption((prev) => (prev === 'RATING' ? 'CUMULATIVE' : 'RATING'));
   };
 
   return (
@@ -119,9 +133,33 @@ export const StaffScreen: React.FC<StaffScreenProps> = (props) => {
         })}
       </div>
 
-      {/* 3. スリムステータスバー (件数 & ソート切り替え) */}
+      {/* 2.5. 初参加年代フィルター (水平スクロールセレクター) */}
+      <div className="flex items-center gap-1.5 px-3 py-1 overflow-x-auto no-scrollbar border-b border-outlineVariant/20 flex-shrink-0 bg-surfaceContainer/30">
+        <span className="text-[11px] font-bold text-onSurfaceVariant/80 px-1 whitespace-nowrap flex-shrink-0">
+          {isEn ? 'Debut Era:' : '初参加年代:'}
+        </span>
+        {(['all', '2020s', '2015plus', '2010s', '2000s', 'pre2000'] as DebutEraFilter[]).map((era) => {
+          const isSelected = debutEra === era;
+          const label = AppStrings.debutEraLabel(era, isEn);
+          return (
+            <button
+              key={era}
+              onClick={() => setDebutEra(era)}
+              className={`px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap border transition-colors flex-shrink-0 ${
+                isSelected
+                  ? 'bg-primary text-onPrimary border-primary font-bold shadow-sm'
+                  : 'bg-surface border-outlineVariant/30 text-onSurfaceVariant hover:text-onSurface'
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 3. スリムステータスバー (件数 & ソートセレクター) */}
       <div className="flex items-center justify-between px-4 py-1.5 text-xs text-onSurfaceVariant border-b border-outlineVariant/20">
-        <span>
+        <span className="font-medium">
           {isEn
             ? selectedRole === 'studio'
               ? `${totalCount} Studios`
@@ -131,19 +169,20 @@ export const StaffScreen: React.FC<StaffScreenProps> = (props) => {
             : `${totalCount} 名のスタッフ・声優`}
         </span>
 
-        {selectedRole !== 'studio' && (
-          <button
-            onClick={toggleSort}
-            className="flex items-center gap-1 text-primary font-bold hover:underline"
+        <div className="flex items-center gap-1.5">
+          <ArrowUpDown className="w-3.5 h-3.5 text-primary" />
+          <select
+            value={sortOption}
+            onChange={(e) => setSortOption(e.target.value as StaffSortOption)}
+            className="bg-transparent text-primary font-bold text-xs cursor-pointer focus:outline-none border-b border-dashed border-primary/40 pb-0.5"
           >
-            <ArrowUpDown className="w-3.5 h-3.5" />
-            <span>
-              {sortOption === 'RATING'
-                ? isEn ? 'Power Score S(a)' : '総合実力 S(a) 順'
-                : isEn ? 'Cumulative ΣZ' : '生涯累積実績 ΣZ 順'}
-            </span>
-          </button>
-        )}
+            <option value="RATING">{AppStrings.staffSortDisplayName('RATING', isEn)}</option>
+            <option value="CUMULATIVE">{AppStrings.staffSortDisplayName('CUMULATIVE', isEn)}</option>
+            <option value="NEWEST_DEBUT">{AppStrings.staffSortDisplayName('NEWEST_DEBUT', isEn)}</option>
+            <option value="OLDEST_DEBUT">{AppStrings.staffSortDisplayName('OLDEST_DEBUT', isEn)}</option>
+            <option value="WORKS_COUNT">{AppStrings.staffSortDisplayName('WORKS_COUNT', isEn)}</option>
+          </select>
+        </div>
       </div>
 
       {/* 4. リーダーボードリスト */}
@@ -206,21 +245,26 @@ export const StaffScreen: React.FC<StaffScreenProps> = (props) => {
 
                     {/* 中央: 名前、役職、代表作 */}
                     <div className="flex-1 min-w-0 pr-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-sm font-bold text-onSurface truncate">
                           {displayName}
                         </span>
                         <RoleBadge roleKey={staff.role} isEn={isEn} />
+                        {staff.firstYear && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-surfaceContainerHigh text-onSurfaceVariant font-semibold whitespace-nowrap">
+                            {isEn ? `Debut: ${staff.firstYear}` : `${staff.firstYear}年〜`}
+                          </span>
+                        )}
                       </div>
 
                       <div className="text-[11px] text-onSurfaceVariant truncate mt-0.5">
                         {staff.bestWorkTitle ? (
                           <span>
-                            代表作: {isEn && staff.bestWorkTitleEn ? staff.bestWorkTitleEn : staff.bestWorkTitle}
+                            {isEn ? 'Best: ' : '代表作: '}{isEn && staff.bestWorkTitleEn ? staff.bestWorkTitleEn : staff.bestWorkTitle}
                             {staff.bestWorkYear ? ` (${staff.bestWorkYear})` : ''}
                           </span>
                         ) : (
-                          <span>参加作品: {staff.worksCount} 作品</span>
+                          <span>{isEn ? `${staff.worksCount} works` : `参加作品: ${staff.worksCount} 作品`}</span>
                         )}
                       </div>
                     </div>

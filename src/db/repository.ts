@@ -487,7 +487,9 @@ export const CreditRepository = {
     query: string = '',
     sortOption: StaffSortOption = 'RATING',
     limit: number = 50,
-    offset: number = 0
+    offset: number = 0,
+    debutMin?: number,
+    debutMax?: number
   ): LeaderboardItem[] {
     const db = getDatabase();
     const [, titleToEnMap] = getWorkTitleEnMaps();
@@ -497,6 +499,14 @@ export const CreditRepository = {
       try {
         const conditions: string[] = [];
         const args: any[] = [];
+        if (debutMin !== undefined && debutMin > 0) {
+          conditions.push('first_year >= ?');
+          args.push(debutMin);
+        }
+        if (debutMax !== undefined && debutMax > 0) {
+          conditions.push('first_year <= ?');
+          args.push(debutMax);
+        }
         if (query.trim()) {
           const qNorm = normalizeText(query.trim());
           const hasLatin = /[a-zA-Z]/.test(query);
@@ -511,9 +521,16 @@ export const CreditRepository = {
           }
         }
         const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+        let studioOrder = 'ORDER BY works_count DESC';
+        if (sortOption === 'NEWEST_DEBUT') {
+          studioOrder = 'ORDER BY CASE WHEN first_year IS NULL THEN 1 ELSE 0 END, first_year DESC, works_count DESC';
+        } else if (sortOption === 'OLDEST_DEBUT') {
+          studioOrder = 'ORDER BY CASE WHEN first_year IS NULL THEN 1 ELSE 0 END, first_year ASC, works_count DESC';
+        }
+
         const sql = `
-          SELECT name, works_count, best_work_title, best_work_year, best_work_dev, best_work_tier
-          FROM studios ${whereClause} ORDER BY works_count DESC LIMIT ? OFFSET ?
+          SELECT name, works_count, best_work_title, best_work_year, best_work_dev, best_work_tier, first_year, latest_year
+          FROM studios ${whereClause} ${studioOrder} LIMIT ? OFFSET ?
         `;
         args.push(limit, offset);
         const res = db.exec(sql, args);
@@ -535,7 +552,9 @@ export const CreditRepository = {
               bestWorkTitle: bwTitle,
               bestWorkTitleEn: bwTitle ? titleToEnMap[bwTitle] || null : null,
               bestWorkYear: row[3] ? Number(row[3]) : null,
-              bestWorkZ: row[4] !== null ? Number(row[4]) : null
+              bestWorkZ: row[4] !== null ? Number(row[4]) : null,
+              firstYear: row[6] ? Number(row[6]) : null,
+              latestYear: row[7] ? Number(row[7]) : null
             });
             rank++;
           }
@@ -549,7 +568,7 @@ export const CreditRepository = {
 
     // 全役職で検索クエリがある場合、マッチするスタジオを先頭に統合
     const matchedStudios: LeaderboardItem[] = [];
-    if (role === 'all' && query.trim() && offset === 0) {
+    if (role === 'all' && query.trim() && offset === 0 && debutMin === undefined && debutMax === undefined) {
       try {
         const qNorm = normalizeText(query.trim());
         const hasLatin = /[a-zA-Z]/.test(query);
@@ -565,7 +584,7 @@ export const CreditRepository = {
           stArgs.push(`%${qNorm}%`);
         }
         const stSql = `
-          SELECT name, works_count, best_work_title, best_work_year, best_work_dev, best_work_tier
+          SELECT name, works_count, best_work_title, best_work_year, best_work_dev, best_work_tier, first_year, latest_year
           FROM studios WHERE ${stConditions.join(' AND ')} ORDER BY works_count DESC LIMIT 3
         `;
         const stRes = db.exec(stSql, stArgs);
@@ -585,7 +604,9 @@ export const CreditRepository = {
               bestWorkTitle: bwTitle,
               bestWorkTitleEn: bwTitle ? titleToEnMap[bwTitle] || null : null,
               bestWorkYear: row[3] ? Number(row[3]) : null,
-              bestWorkZ: row[4] !== null ? Number(row[4]) : null
+              bestWorkZ: row[4] !== null ? Number(row[4]) : null,
+              firstYear: row[6] ? Number(row[6]) : null,
+              latestYear: row[7] ? Number(row[7]) : null
             });
           }
         }
@@ -597,6 +618,15 @@ export const CreditRepository = {
 
     const conditions: string[] = ['role = ?'];
     const args: any[] = [role];
+
+    if (debutMin !== undefined && debutMin > 0) {
+      conditions.push('first_year >= ?');
+      args.push(debutMin);
+    }
+    if (debutMax !== undefined && debutMax > 0) {
+      conditions.push('first_year <= ?');
+      args.push(debutMax);
+    }
 
     if (query.trim()) {
       const qNorm = normalizeText(query.trim());
@@ -613,12 +643,20 @@ export const CreditRepository = {
     }
 
     const whereClause = 'WHERE ' + conditions.join(' AND ');
-    const orderClause = sortOption === 'RATING' ? 'ORDER BY rating_rank ASC' : 'ORDER BY cumulative_rank ASC';
+    let orderClause = 'ORDER BY rating_rank ASC';
+    switch (sortOption) {
+      case 'RATING': orderClause = 'ORDER BY rating_rank ASC'; break;
+      case 'CUMULATIVE': orderClause = 'ORDER BY cumulative_rank ASC'; break;
+      case 'NEWEST_DEBUT': orderClause = 'ORDER BY CASE WHEN first_year IS NULL THEN 1 ELSE 0 END, first_year DESC, rating_rank ASC'; break;
+      case 'OLDEST_DEBUT': orderClause = 'ORDER BY CASE WHEN first_year IS NULL THEN 1 ELSE 0 END, first_year ASC, rating_rank ASC'; break;
+      case 'WORKS_COUNT': orderClause = 'ORDER BY works_count DESC, rating_rank ASC'; break;
+    }
 
     const sql = `
       SELECT role, name, works_count, bayesian_rating, career_cumulative_z,
              rating_rank, cumulative_rank, rating_tier, cumulative_tier,
-             best_work_title, best_work_year, best_work_z, top_character
+             best_work_title, best_work_year, best_work_z, top_character,
+             first_year, latest_year
       FROM leaderboards ${whereClause} ${orderClause} LIMIT ? OFFSET ?
     `;
     args.push(limit, offset);
@@ -642,19 +680,34 @@ export const CreditRepository = {
           bestWorkTitleEn: bwTitle ? titleToEnMap[bwTitle] || null : null,
           bestWorkYear: row[10] ? Number(row[10]) : null,
           bestWorkZ: row[11] !== null ? Number(row[11]) : null,
-          topCharacter: row[12] ? String(row[12]) : null
+          topCharacter: row[12] ? String(row[12]) : null,
+          firstYear: row[13] ? Number(row[13]) : null,
+          latestYear: row[14] ? Number(row[14]) : null
         });
       }
     }
     return [...matchedStudios, ...list];
   },
 
-  getLeaderboardCount(role: string = 'all', query: string = ''): number {
+  getLeaderboardCount(
+    role: string = 'all',
+    query: string = '',
+    debutMin?: number,
+    debutMax?: number
+  ): number {
     const db = getDatabase();
     if (role === 'studio') {
       try {
         const conditions: string[] = [];
         const args: any[] = [];
+        if (debutMin !== undefined && debutMin > 0) {
+          conditions.push('first_year >= ?');
+          args.push(debutMin);
+        }
+        if (debutMax !== undefined && debutMax > 0) {
+          conditions.push('first_year <= ?');
+          args.push(debutMax);
+        }
         if (query.trim()) {
           const qNorm = normalizeText(query.trim());
           const hasLatin = /[a-zA-Z]/.test(query);
@@ -681,6 +734,15 @@ export const CreditRepository = {
 
     const conditions: string[] = ['role = ?'];
     const args: any[] = [role];
+
+    if (debutMin !== undefined && debutMin > 0) {
+      conditions.push('first_year >= ?');
+      args.push(debutMin);
+    }
+    if (debutMax !== undefined && debutMax > 0) {
+      conditions.push('first_year <= ?');
+      args.push(debutMax);
+    }
 
     if (query.trim()) {
       const qNorm = normalizeText(query.trim());

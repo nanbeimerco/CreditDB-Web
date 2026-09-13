@@ -139,6 +139,52 @@ export const AppStrings = {
     }
   },
 
+  staffSortDisplayName(opt: string, isEn: boolean): string {
+    if (!isEn) {
+      switch (opt) {
+        case 'RATING': return '実力スコア順 S(a)';
+        case 'CUMULATIVE': return '生涯累積実績順 ΣZ';
+        case 'NEWEST_DEBUT': return '初参加年 (新しい順 / 若手・新世代)';
+        case 'OLDEST_DEBUT': return '初参加年 (古い順 / ベテラン)';
+        case 'WORKS_COUNT': return '参加作品数 (多い順)';
+        default: return opt;
+      }
+    } else {
+      switch (opt) {
+        case 'RATING': return 'Skill Rating S(a)';
+        case 'CUMULATIVE': return 'Career Cumulative ΣZ';
+        case 'NEWEST_DEBUT': return 'Debut Era (Newest / Rising)';
+        case 'OLDEST_DEBUT': return 'Debut Era (Oldest / Veterans)';
+        case 'WORKS_COUNT': return 'Works Count (High-Low)';
+        default: return opt;
+      }
+    }
+  },
+
+  debutEraLabel(filter: string, isEn: boolean): string {
+    if (!isEn) {
+      switch (filter) {
+        case 'all': return '全年代';
+        case '2020s': return '2020年代〜 (新世代)';
+        case '2015plus': return '2015年〜 (新鋭・中堅)';
+        case '2010s': return '2010年代';
+        case '2000s': return '2000年代';
+        case 'pre2000': return '1990年代以前';
+        default: return filter;
+      }
+    } else {
+      switch (filter) {
+        case 'all': return 'All Eras';
+        case '2020s': return '2020s~ (New Gen)';
+        case '2015plus': return '2015+ (Mid & Rising)';
+        case '2010s': return '2010s';
+        case '2000s': return '2000s';
+        case 'pre2000': return 'Pre-2000s';
+        default: return filter;
+      }
+    }
+  },
+
   // --- 評価判定 (Full & Compact) ---
   verdictFull(verdict: string, isEn: boolean): string {
     if (isEn) {
