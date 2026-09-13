@@ -21,7 +21,7 @@ interface StaffScreenProps {
 const getDebutYearRange = (filter: DebutEraFilter): [number | undefined, number | undefined] => {
   switch (filter) {
     case '2020s': return [2020, undefined];
-    case '2015plus': return [2015, undefined];
+    case '2015_2019': return [2015, 2019];
     case '2010s': return [2010, 2019];
     case '2000s': return [2000, 2009];
     case 'pre2000': return [undefined, 1999];
@@ -138,7 +138,7 @@ export const StaffScreen: React.FC<StaffScreenProps> = (props) => {
         <span className="text-[11px] font-bold text-onSurfaceVariant/80 px-1 whitespace-nowrap flex-shrink-0">
           {isEn ? 'Debut Era:' : '初参加年代:'}
         </span>
-        {(['all', '2020s', '2015plus', '2010s', '2000s', 'pre2000'] as DebutEraFilter[]).map((era) => {
+        {(['all', '2020s', '2015_2019', '2010s', '2000s', 'pre2000'] as DebutEraFilter[]).map((era) => {
           const isSelected = debutEra === era;
           const label = AppStrings.debutEraLabel(era, isEn);
           return (
@@ -250,11 +250,6 @@ export const StaffScreen: React.FC<StaffScreenProps> = (props) => {
                           {displayName}
                         </span>
                         <RoleBadge roleKey={staff.role} isEn={isEn} />
-                        {staff.firstYear && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-surfaceContainerHigh text-onSurfaceVariant font-semibold whitespace-nowrap">
-                            {isEn ? `Debut: ${staff.firstYear}` : `${staff.firstYear}年〜`}
-                          </span>
-                        )}
                       </div>
 
                       <div className="text-[11px] text-onSurfaceVariant truncate mt-0.5">

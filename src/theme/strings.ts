@@ -166,7 +166,7 @@ export const AppStrings = {
       switch (filter) {
         case 'all': return '全年代';
         case '2020s': return '2020年代〜';
-        case '2015plus': return '2015年〜';
+        case '2015_2019': return '2015〜2019年';
         case '2010s': return '2010年代';
         case '2000s': return '2000年代';
         case 'pre2000': return '1990年代以前';
@@ -176,7 +176,7 @@ export const AppStrings = {
       switch (filter) {
         case 'all': return 'All Eras';
         case '2020s': return '2020s~';
-        case '2015plus': return '2015+';
+        case '2015_2019': return '2015–2019';
         case '2010s': return '2010s';
         case '2000s': return '2000s';
         case 'pre2000': return 'Pre-2000s';

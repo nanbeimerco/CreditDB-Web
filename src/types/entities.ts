@@ -164,7 +164,7 @@ export type WorksSortOption =
   | 'TITLE_ASC';
 
 export type StaffSortOption = 'RATING' | 'CUMULATIVE' | 'NEWEST_DEBUT' | 'OLDEST_DEBUT' | 'WORKS_COUNT';
-export type DebutEraFilter = 'all' | '2020s' | '2015plus' | '2010s' | '2000s' | 'pre2000';
+export type DebutEraFilter = 'all' | '2020s' | '2015_2019' | '2010s' | '2000s' | 'pre2000';
 
 export const ROLE_ORDER = [
   'director',
