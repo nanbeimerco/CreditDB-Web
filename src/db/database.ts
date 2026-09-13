@@ -238,7 +238,7 @@ export async function initializeDatabase(
         const checkCol = currentDb.exec("PRAGMA table_info(leaderboards)");
         const hasFirstYear = checkCol.length > 0 && checkCol[0].values.some(row => row[1] === 'first_year');
 
-        if (checkStudios.length > 0 && checkStudios[0].values.length > 0 && totalWorks >= 20000 && hasFirstYear && dbVersion === '2.0.0') {
+        if (checkStudios.length > 0 && checkStudios[0].values.length > 0 && totalWorks >= 20000 && hasFirstYear && dbVersion === '2.1.0') {
           onProgress?.(100, '起動完了');
           return currentDb;
         } else {
@@ -261,12 +261,12 @@ export async function initializeDatabase(
 
   // 2. サーバーから最新の creditdb.db.gz を取得 (キャッシュバスター付与)
   onProgress?.(10, 'データベースをダウンロード中...');
-  const res = await fetch(`${getAssetPath('data/creditdb.db.gz')}?v=2.0.0`, { cache: 'no-cache' });
+  const res = await fetch(`${getAssetPath('data/creditdb.db.gz')}?v=2.1.0`, { cache: 'no-cache' });
   if (!res.ok) {
     throw new Error(`Failed to fetch database: ${res.status} ${res.statusText}`);
   }
 
-  const contentLength = Number(res.headers.get('Content-Length')) || 30788116;
+  const contentLength = Number(res.headers.get('Content-Length')) || 45447168;
   const dbBytes = await decompressGzipStream(res, contentLength, onProgress);
 
   onProgress?.(92, 'データベースの整合性を検証中...');
@@ -275,7 +275,7 @@ export async function initializeDatabase(
   onProgress?.(96, '高速起動用キャッシュを保存中...');
   // version.json のメタデータも一緒にキャッシュ
   try {
-    const vRes = await fetch(`${getAssetPath('data/version.json')}?v=2.0.0`, { cache: 'no-cache' });
+    const vRes = await fetch(`${getAssetPath('data/version.json')}?v=2.1.0`, { cache: 'no-cache' });
     const vJson = vRes.ok ? await vRes.json() : null;
     await saveDbBytesToCache(dbBytes, vJson);
   } catch {

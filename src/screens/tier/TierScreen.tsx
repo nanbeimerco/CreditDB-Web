@@ -9,6 +9,7 @@ import { TierCustomizeDialog } from './TierCustomizeDialog';
 import { TierAffinitySheet } from './TierAffinitySheet';
 import { TierCorrelationSheet } from './TierCorrelationSheet';
 import { TierExportDialog } from './TierExportDialog';
+import { CreditRepository } from '../../db/repository';
 import { useLanguage } from '../../theme/languageManager';
 import { Trophy, Sparkles, Sliders, Share2 } from 'lucide-react';
 
@@ -60,6 +61,29 @@ export const TierScreen: React.FC<TierScreenProps> = ({
       return () => clearTimeout(timer);
     }
   }, [snackbarMessage]);
+
+  // DBの最新スコア（偏差値、Tier等）とTier表の配置作品を自動同期
+  useEffect(() => {
+    try {
+      let changed = false;
+      const refreshedRows = config.rows.map(row => {
+        if (!row.items || row.items.length === 0) return row;
+        const refreshedItems = CreditRepository.refreshTierAnimeItems(row.items);
+        const hasDiff = refreshedItems.some((it, idx) => 
+          it.deviationScore !== row.items[idx]?.deviationScore || it.tier !== row.items[idx]?.tier
+        );
+        if (hasDiff) changed = true;
+        return { ...row, items: refreshedItems };
+      });
+      if (changed) {
+        const newConfig = { ...config, rows: refreshedRows };
+        setConfig(newConfig);
+        TierStorageManager.saveConfig(newConfig);
+      }
+    } catch (e) {
+      console.warn('Failed to auto-refresh tier scores from DB:', e);
+    }
+  }, []);
 
   const updateAndPersistConfig = useCallback((newConfig: TierTableConfig) => {
     setConfig(newConfig);

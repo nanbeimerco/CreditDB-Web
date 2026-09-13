@@ -18,6 +18,7 @@ import {
   WorksSortOption,
   StaffSortOption
 } from '../types/entities';
+import { TierAnimeItem } from '../types/tier';
 import { normalizeText } from '../utils/textNormalizer';
 import { StaffNameResolver } from '../utils/nameResolver';
 
@@ -811,15 +812,52 @@ export const CreditRepository = {
     return res.length > 0 && res[0].values.length > 0 ? Number(res[0].values[0][0]) : 0;
   },
 
+  refreshTierAnimeItems(items: TierAnimeItem[]): TierAnimeItem[] {
+    if (!items || items.length === 0) return items;
+    const db = getDatabase();
+    const ids = items.map(it => it.id);
+    const placeholders = ids.map(() => '?').join(',');
+    const sql = `SELECT work_id, deviation_score, tier, predicted_score, residual FROM works WHERE work_id IN (${placeholders})`;
+    try {
+      const res = db.exec(sql, ids);
+      if (res.length === 0 || res[0].values.length === 0) return items;
+      const scoreMap = new Map<string, { dev: number; tier: string; pred: number; res: number }>();
+      for (const row of res[0].values) {
+        scoreMap.set(String(row[0]), {
+          dev: Number(row[1] ?? 50.0),
+          tier: String(row[2] ?? 'B'),
+          pred: Number(row[3] ?? 50.0),
+          res: Number(row[4] ?? 0.0)
+        });
+      }
+      return items.map(it => {
+        const latest = scoreMap.get(it.id);
+        if (!latest) return it;
+        return {
+          ...it,
+          deviationScore: latest.dev,
+          tier: latest.tier,
+          predictedScore: latest.pred,
+          residual: latest.res
+        };
+      });
+    } catch (e) {
+      console.warn('Failed to refresh tier anime items from DB:', e);
+      return items;
+    }
+  },
+
   getStaffProfile(staffName: string): StaffProfile {
     const db = getDatabase();
     const [workIdToEnMap] = getWorkTitleEnMaps();
 
     const sql = `
-      SELECT p.name, p.primary_role, p.total_works, p.bayesian_rating,
+      SELECT p.name, p.primary_role,
+             COALESCE(l.works_count, p.total_works),
+             COALESCE(l.bayesian_rating, p.bayesian_rating),
              COALESCE(l.rating_tier, p.overall_rating_tier),
              COALESCE(l.rating_rank, p.overall_rank),
-             p.career_cumulative_z,
+             COALESCE(l.career_cumulative_z, p.career_cumulative_z),
              COALESCE(l.cumulative_tier, p.overall_cum_tier),
              COALESCE(l.cumulative_rank, p.cumulative_rank),
              p.all_role_stats_json,
@@ -832,18 +870,67 @@ export const CreditRepository = {
     if (res.length > 0 && res[0].values.length > 0) {
       try {
         const row = res[0].values[0];
+
+        // Query live role stats from leaderboards for 100% real-time data consistency
+        const lbRolesMap = new Map<string, any>();
+        try {
+          const lbRolesRes = db.exec(`
+            SELECT role, works_count, bayesian_rating, career_cumulative_z,
+                   rating_rank, cumulative_rank, rating_tier, cumulative_tier
+            FROM leaderboards WHERE name = ? AND role != 'all'
+          `, [staffName]);
+          if (lbRolesRes.length > 0 && lbRolesRes[0].values.length > 0) {
+            for (const r of lbRolesRes[0].values) {
+              lbRolesMap.set(String(r[0]), {
+                role: String(r[0]),
+                works_count: Number(r[1]),
+                bayesian_rating: Number(r[2]),
+                career_cumulative_z: Number(r[3]),
+                rating_rank: Number(r[4]),
+                cumulative_rank: Number(r[5]),
+                rating_tier: String(r[6]),
+                cum_tier: String(r[7])
+              });
+            }
+          }
+        } catch {}
+
         const rawRoleStats: any[] = JSON.parse(String(row[9] || '[]'));
-        const roleStats: RoleStat[] = rawRoleStats.map(r => ({
-          role: String(r.role || ''),
-          works_count: Number(r.works_count ?? 0),
-          bayesian_rating: Number(r.bayesian_rating ?? 0),
-          career_cumulative_z: Number(r.career_cumulative_z ?? r.cumulative_z ?? 0),
-          rating_rank: Number(r.rating_rank ?? 0),
-          cumulative_rank: Number(r.cumulative_rank ?? 0),
-          role_total: Number(r.role_total ?? 1000),
-          rating_tier: String(r.rating_tier || 'B'),
-          cum_tier: String(r.cum_tier || r.cumulative_tier || 'B')
-        }));
+        const seenRoles = new Set<string>();
+        const roleStats: RoleStat[] = rawRoleStats.map(r => {
+          const rKey = String(r.role || '');
+          seenRoles.add(rKey);
+          const live = lbRolesMap.get(rKey);
+          return {
+            role: rKey,
+            works_count: live ? live.works_count : Number(r.works_count ?? 0),
+            bayesian_rating: live ? live.bayesian_rating : Number(r.bayesian_rating ?? 0),
+            career_cumulative_z: live ? live.career_cumulative_z : Number(r.career_cumulative_z ?? r.cumulative_z ?? 0),
+            rating_rank: live ? live.rating_rank : Number(r.rating_rank ?? 0),
+            cumulative_rank: live ? live.cumulative_rank : Number(r.cumulative_rank ?? 0),
+            role_total: Number(r.role_total ?? 1000),
+            rating_tier: live ? live.rating_tier : String(r.rating_tier || 'B'),
+            cum_tier: live ? live.cum_tier : String(r.cum_tier || r.cumulative_tier || 'B')
+          };
+        });
+
+        // Add any roles that exist in leaderboards but were missing in JSON
+        for (const [rKey, live] of lbRolesMap.entries()) {
+          if (!seenRoles.has(rKey)) {
+            roleStats.push({
+              role: rKey,
+              works_count: live.works_count,
+              bayesian_rating: live.bayesian_rating,
+              career_cumulative_z: live.career_cumulative_z,
+              rating_rank: live.rating_rank,
+              cumulative_rank: live.cumulative_rank,
+              role_total: 1000,
+              rating_tier: live.rating_tier,
+              cum_tier: live.cum_tier
+            });
+          }
+        }
+
         const rawTrajectory: CareerTrajectoryItem[] = JSON.parse(String(row[10] || '[]'));
         const trajectory = rawTrajectory.map(item => ({
           ...item,
