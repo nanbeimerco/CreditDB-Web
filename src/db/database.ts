@@ -229,34 +229,44 @@ export async function initializeDatabase(
       onProgress?.(60, 'キャッシュからデータベースを起動中...');
       try {
         currentDb = new sqlStatic.Database(cachedBytes);
-        // Schema & version check: verify that studios table exists AND total_works >= 20000
+        // Schema & version check: verify that studios table exists, total_works >= 20000, version == '2.0.0', and first_year column exists
         const checkStudios = currentDb.exec("SELECT 1 FROM sqlite_master WHERE type='table' AND name='studios'");
-        const checkWorks = currentDb.exec("SELECT total_works FROM summary LIMIT 1");
+        const checkWorks = currentDb.exec("SELECT total_works, version FROM summary LIMIT 1");
         const totalWorks = (checkWorks.length > 0 && checkWorks[0].values.length > 0) ? Number(checkWorks[0].values[0][0]) : 0;
+        const dbVersion = (checkWorks.length > 0 && checkWorks[0].values.length > 0) ? String(checkWorks[0].values[0][1]) : '';
 
-        if (checkStudios.length > 0 && checkStudios[0].values.length > 0 && totalWorks >= 20000) {
+        const checkCol = currentDb.exec("PRAGMA table_info(leaderboards)");
+        const hasFirstYear = checkCol.length > 0 && checkCol[0].values.some(row => row[1] === 'first_year');
+
+        if (checkStudios.length > 0 && checkStudios[0].values.length > 0 && totalWorks >= 20000 && hasFirstYear && dbVersion === '2.0.0') {
           onProgress?.(100, '起動完了');
           return currentDb;
         } else {
-          console.warn(`Cached DB is outdated (totalWorks=${totalWorks}). Refetching latest database from server...`);
+          console.warn(`Cached DB is outdated (version=${dbVersion}, totalWorks=${totalWorks}, hasFirstYear=${hasFirstYear}). Purging cache and refetching latest DB...`);
           currentDb.close();
           currentDb = null;
+          await clearDbCache();
         }
       } catch (e) {
-        console.warn('Corrupted database in cache, refetching...', e);
+        console.warn('Corrupted database in cache, purging and refetching...', e);
+        await clearDbCache();
+        if (currentDb) {
+          try { currentDb.close(); } catch {}
+          currentDb = null;
+        }
       }
 
     }
   }
 
-  // 2. サーバーから最新の creditdb.db.gz を取得
+  // 2. サーバーから最新の creditdb.db.gz を取得 (キャッシュバスター付与)
   onProgress?.(10, 'データベースをダウンロード中...');
-  const res = await fetch(getAssetPath('data/creditdb.db.gz'), { cache: 'no-cache' });
+  const res = await fetch(`${getAssetPath('data/creditdb.db.gz')}?v=2.0.0`, { cache: 'no-cache' });
   if (!res.ok) {
     throw new Error(`Failed to fetch database: ${res.status} ${res.statusText}`);
   }
 
-  const contentLength = Number(res.headers.get('Content-Length')) || 22692926;
+  const contentLength = Number(res.headers.get('Content-Length')) || 30788116;
   const dbBytes = await decompressGzipStream(res, contentLength, onProgress);
 
   onProgress?.(92, 'データベースの整合性を検証中...');
@@ -265,7 +275,7 @@ export async function initializeDatabase(
   onProgress?.(96, '高速起動用キャッシュを保存中...');
   // version.json のメタデータも一緒にキャッシュ
   try {
-    const vRes = await fetch(getAssetPath('data/version.json'), { cache: 'no-cache' });
+    const vRes = await fetch(`${getAssetPath('data/version.json')}?v=2.0.0`, { cache: 'no-cache' });
     const vJson = vRes.ok ? await vRes.json() : null;
     await saveDbBytesToCache(dbBytes, vJson);
   } catch {

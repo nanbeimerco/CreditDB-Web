@@ -494,18 +494,33 @@ export const CreditRepository = {
     const db = getDatabase();
     const [, titleToEnMap] = getWorkTitleEnMaps();
 
+    // スキーマ防御チェック (旧キャッシュが存在してもSQLエラーで画面が停止しないように防護)
+    let hasStudioFirstYear = false;
+    try {
+      const sInfo = db.exec("PRAGMA table_info(studios)");
+      hasStudioFirstYear = sInfo.length > 0 && sInfo[0].values.some((c: any[]) => c[1] === 'first_year');
+    } catch {}
+
+    let hasLbFirstYear = false;
+    try {
+      const lInfo = db.exec("PRAGMA table_info(leaderboards)");
+      hasLbFirstYear = lInfo.length > 0 && lInfo[0].values.some((c: any[]) => c[1] === 'first_year');
+    } catch {}
+
     // スタジオ役職
     if (role === 'studio') {
       try {
         const conditions: string[] = [];
         const args: any[] = [];
-        if (debutMin !== undefined && debutMin > 0) {
-          conditions.push('first_year >= ?');
-          args.push(debutMin);
-        }
-        if (debutMax !== undefined && debutMax > 0) {
-          conditions.push('first_year <= ?');
-          args.push(debutMax);
+        if (hasStudioFirstYear) {
+          if (debutMin !== undefined && debutMin > 0) {
+            conditions.push('first_year >= ?');
+            args.push(debutMin);
+          }
+          if (debutMax !== undefined && debutMax > 0) {
+            conditions.push('first_year <= ?');
+            args.push(debutMax);
+          }
         }
         if (query.trim()) {
           const qNorm = normalizeText(query.trim());
@@ -522,14 +537,18 @@ export const CreditRepository = {
         }
         const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
         let studioOrder = 'ORDER BY works_count DESC';
-        if (sortOption === 'NEWEST_DEBUT') {
+        if (hasStudioFirstYear && sortOption === 'NEWEST_DEBUT') {
           studioOrder = 'ORDER BY CASE WHEN first_year IS NULL THEN 1 ELSE 0 END, first_year DESC, works_count DESC';
-        } else if (sortOption === 'OLDEST_DEBUT') {
+        } else if (hasStudioFirstYear && sortOption === 'OLDEST_DEBUT') {
           studioOrder = 'ORDER BY CASE WHEN first_year IS NULL THEN 1 ELSE 0 END, first_year ASC, works_count DESC';
         }
 
+        const selectCols = hasStudioFirstYear
+          ? 'name, works_count, best_work_title, best_work_year, best_work_dev, best_work_tier, first_year, latest_year'
+          : 'name, works_count, best_work_title, best_work_year, best_work_dev, best_work_tier, NULL as first_year, NULL as latest_year';
+
         const sql = `
-          SELECT name, works_count, best_work_title, best_work_year, best_work_dev, best_work_tier, first_year, latest_year
+          SELECT ${selectCols}
           FROM studios ${whereClause} ${studioOrder} LIMIT ? OFFSET ?
         `;
         args.push(limit, offset);
@@ -619,13 +638,15 @@ export const CreditRepository = {
     const conditions: string[] = ['role = ?'];
     const args: any[] = [role];
 
-    if (debutMin !== undefined && debutMin > 0) {
-      conditions.push('first_year >= ?');
-      args.push(debutMin);
-    }
-    if (debutMax !== undefined && debutMax > 0) {
-      conditions.push('first_year <= ?');
-      args.push(debutMax);
+    if (hasLbFirstYear) {
+      if (debutMin !== undefined && debutMin > 0) {
+        conditions.push('first_year >= ?');
+        args.push(debutMin);
+      }
+      if (debutMax !== undefined && debutMax > 0) {
+        conditions.push('first_year <= ?');
+        args.push(debutMax);
+      }
     }
 
     if (query.trim()) {
@@ -647,16 +668,25 @@ export const CreditRepository = {
     switch (sortOption) {
       case 'RATING': orderClause = 'ORDER BY rating_rank ASC'; break;
       case 'CUMULATIVE': orderClause = 'ORDER BY cumulative_rank ASC'; break;
-      case 'NEWEST_DEBUT': orderClause = 'ORDER BY CASE WHEN first_year IS NULL THEN 1 ELSE 0 END, first_year DESC, rating_rank ASC'; break;
-      case 'OLDEST_DEBUT': orderClause = 'ORDER BY CASE WHEN first_year IS NULL THEN 1 ELSE 0 END, first_year ASC, rating_rank ASC'; break;
+      case 'NEWEST_DEBUT':
+        orderClause = hasLbFirstYear
+          ? 'ORDER BY CASE WHEN first_year IS NULL THEN 1 ELSE 0 END, first_year DESC, rating_rank ASC'
+          : 'ORDER BY rating_rank ASC';
+        break;
+      case 'OLDEST_DEBUT':
+        orderClause = hasLbFirstYear
+          ? 'ORDER BY CASE WHEN first_year IS NULL THEN 1 ELSE 0 END, first_year ASC, rating_rank ASC'
+          : 'ORDER BY rating_rank ASC';
+        break;
       case 'WORKS_COUNT': orderClause = 'ORDER BY works_count DESC, rating_rank ASC'; break;
     }
 
+    const selectCols = hasLbFirstYear
+      ? 'role, name, works_count, bayesian_rating, career_cumulative_z, rating_rank, cumulative_rank, rating_tier, cumulative_tier, best_work_title, best_work_year, best_work_z, top_character, first_year, latest_year'
+      : 'role, name, works_count, bayesian_rating, career_cumulative_z, rating_rank, cumulative_rank, rating_tier, cumulative_tier, best_work_title, best_work_year, best_work_z, top_character, NULL as first_year, NULL as latest_year';
+
     const sql = `
-      SELECT role, name, works_count, bayesian_rating, career_cumulative_z,
-             rating_rank, cumulative_rank, rating_tier, cumulative_tier,
-             best_work_title, best_work_year, best_work_z, top_character,
-             first_year, latest_year
+      SELECT ${selectCols}
       FROM leaderboards ${whereClause} ${orderClause} LIMIT ? OFFSET ?
     `;
     args.push(limit, offset);
@@ -696,17 +726,32 @@ export const CreditRepository = {
     debutMax?: number
   ): number {
     const db = getDatabase();
+
+    let hasStudioFirstYear = false;
+    try {
+      const sInfo = db.exec("PRAGMA table_info(studios)");
+      hasStudioFirstYear = sInfo.length > 0 && sInfo[0].values.some((c: any[]) => c[1] === 'first_year');
+    } catch {}
+
+    let hasLbFirstYear = false;
+    try {
+      const lInfo = db.exec("PRAGMA table_info(leaderboards)");
+      hasLbFirstYear = lInfo.length > 0 && lInfo[0].values.some((c: any[]) => c[1] === 'first_year');
+    } catch {}
+
     if (role === 'studio') {
       try {
         const conditions: string[] = [];
         const args: any[] = [];
-        if (debutMin !== undefined && debutMin > 0) {
-          conditions.push('first_year >= ?');
-          args.push(debutMin);
-        }
-        if (debutMax !== undefined && debutMax > 0) {
-          conditions.push('first_year <= ?');
-          args.push(debutMax);
+        if (hasStudioFirstYear) {
+          if (debutMin !== undefined && debutMin > 0) {
+            conditions.push('first_year >= ?');
+            args.push(debutMin);
+          }
+          if (debutMax !== undefined && debutMax > 0) {
+            conditions.push('first_year <= ?');
+            args.push(debutMax);
+          }
         }
         if (query.trim()) {
           const qNorm = normalizeText(query.trim());
@@ -735,13 +780,15 @@ export const CreditRepository = {
     const conditions: string[] = ['role = ?'];
     const args: any[] = [role];
 
-    if (debutMin !== undefined && debutMin > 0) {
-      conditions.push('first_year >= ?');
-      args.push(debutMin);
-    }
-    if (debutMax !== undefined && debutMax > 0) {
-      conditions.push('first_year <= ?');
-      args.push(debutMax);
+    if (hasLbFirstYear) {
+      if (debutMin !== undefined && debutMin > 0) {
+        conditions.push('first_year >= ?');
+        args.push(debutMin);
+      }
+      if (debutMax !== undefined && debutMax > 0) {
+        conditions.push('first_year <= ?');
+        args.push(debutMax);
+      }
     }
 
     if (query.trim()) {
