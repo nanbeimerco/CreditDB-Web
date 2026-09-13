@@ -172,6 +172,15 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
         >
           <HelpCircle className="w-4 h-4" />
         </button>
+
+        {/* データソースクレジット（控えめなフッターバッジ） */}
+        <button
+          onClick={onGuideClick}
+          className="mt-1 pt-1 border-t border-outlineVariant/20 text-[8.5px] text-onSurfaceVariant/50 hover:text-primary transition-colors text-center leading-tight select-none focus:outline-none"
+          title={isEn ? 'Data Sources: AniList & Bangumi API' : 'データ提供: AniList & Bangumi API'}
+        >
+          <span>AniList · Bangumi</span>
+        </button>
       </div>
     </aside>
   );

@@ -2,8 +2,9 @@
  * 数理解説ガイド画面 (誠実・客観的かつ敬意ある表現に推敲済み)
  */
 import React from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { LanguageManager } from '../theme/languageManager';
+import { AppStrings } from '../theme/strings';
 import { TierThemeMap } from '../theme/tierTheme';
 
 interface GuideScreenProps {
@@ -198,6 +199,76 @@ export const GuideScreen: React.FC<GuideScreenProps> = (props) => {
             <div className="p-2 rounded-lg bg-surfaceVariant/60 font-mono text-center text-[11px] font-bold text-onSurface">
               ΣZ = ∑ max(0, Z_i)
             </div>
+          </div>
+        </section>
+
+        {/* ========================================== */}
+        {/* 第4章: データソースとAPIクレジット */}
+        {/* ========================================== */}
+        <section className="space-y-3">
+          <div className="flex items-center gap-2 border-b border-outlineVariant/40 pb-2">
+            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-onPrimary font-bold text-xs">
+              4
+            </span>
+            <h3 className="text-sm font-bold text-onSurface">
+              {AppStrings.guideSection4Title(isEn)}
+            </h3>
+          </div>
+
+          <p>
+            {AppStrings.dataSourceIntro(isEn)}
+          </p>
+
+          {/* AniList API */}
+          <div className="p-3.5 rounded-2xl bg-surfaceContainer border border-outlineVariant/40 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-primary text-xs">
+                🌐 {AppStrings.anilistTitle}
+              </span>
+              <a
+                href="https://anilist.co"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-primaryContainer text-onPrimaryContainer font-bold hover:opacity-80 transition-opacity"
+              >
+                <span>anilist.co</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+            <p>
+              {AppStrings.anilistRole(isEn)}
+            </p>
+          </div>
+
+          {/* Bangumi API */}
+          <div className="p-3.5 rounded-2xl bg-surfaceContainer border border-outlineVariant/40 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-secondary text-xs">
+                🎬 {AppStrings.bangumiTitle}
+              </span>
+              <a
+                href="https://bgm.tv"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-secondaryContainer text-onSecondaryContainer font-bold hover:opacity-80 transition-opacity"
+              >
+                <span>bgm.tv</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+            <p>
+              {AppStrings.bangumiRole(isEn)}
+            </p>
+          </div>
+
+          {/* Acknowledgement */}
+          <div className="p-3.5 rounded-2xl bg-surfaceContainerHigh/50 border border-outlineVariant/30 space-y-1.5">
+            <div className="font-bold text-onSurface text-xs">
+              {isEn ? '🤝 Acknowledgements & Open Data' : '🤝 謝辞とオープンデータについて'}
+            </div>
+            <p className="text-[11px] text-onSurfaceVariant leading-relaxed">
+              {AppStrings.creditAcknowledgement(isEn)}
+            </p>
           </div>
         </section>
       </div>

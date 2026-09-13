@@ -279,5 +279,40 @@ export const AppStrings = {
       case '客串': return 'Guest Role';
       default: return relation;
     }
+  },
+
+  // --- データソース & APIクレジット ---
+  guideSection4Title(isEn: boolean): string {
+    return isEn ? 'Data Sources & API Credits' : 'データソースとAPIクレジット';
+  },
+  dataSourceIntro(isEn: boolean): string {
+    return isEn
+      ? 'CreditDB integrates publicly accessible open APIs to construct its standardized anime catalog and hierarchical production credit database.'
+      : 'CreditDB では、オープンに公開されている高品質なAPI基盤を活用し、作品メタデータおよび詳細な制作クレジットを収集・構造化しています。';
+  },
+  anilistTitle: 'AniList API (GraphQL)',
+  anilistRole(isEn: boolean): string {
+    return isEn
+      ? 'Source for anime catalog metadata (titles, release years, episode counts, cover artwork) and global community weighted user ratings (AniList Raw Score).'
+      : '全世界のアニメ作品基本情報（タイトル、放映年、エピソード数、公式カバー画像）および海外レビュー加重平均スコア（AniList素点）の提供元。';
+  },
+  bangumiTitle: 'Bangumi API (番組計画)',
+  bangumiRole(isEn: boolean): string {
+    return isEn
+      ? 'Source for detailed Japanese animation production staff credits (directors, series composition, character designers, animation directors, key animators, art directors, sound, music, and voice cast).'
+      : '日本国内アニメーションの詳細な制作陣クレジット（監督、シリーズ構成、キャラクターデザイン、演出、作画監督、原画、美術、音楽、キャスト声優等の階層クレジットデータ）の提供元。';
+  },
+  creditAcknowledgement(isEn: boolean): string {
+    return isEn
+      ? 'We express our deepest gratitude to AniList and Bangumi, their developer communities, and the global contributors who continuously maintain these invaluable open databases for anime culture.'
+      : '膨大なアニメーション文化の記録をオープンなデータベース・APIとして公開・維持されている AniList および Bangumi の運営陣ならびにコントリビューターの皆様に深く敬意と感謝を表します。';
+  },
+  workDetailDataFooter(isEn: boolean): string {
+    return isEn
+      ? 'Data: AniList API (Metadata & Scores) · Bangumi API (Credits)'
+      : 'データ提供: AniList API（作品情報・海外評価） · Bangumi API（制作クレジット）';
+  },
+  datasetAttribution(isEn: boolean): string {
+    return isEn ? 'Dataset: AniList API & Bangumi API' : 'データ提供: AniList API · Bangumi API';
   }
 };

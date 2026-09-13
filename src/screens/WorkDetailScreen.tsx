@@ -371,6 +371,13 @@ export const WorkDetailScreen: React.FC<WorkDetailScreenProps> = (props) => {
             )}
           </div>
         </div>
+
+        {/* データ提供・クレジットフッター */}
+        <div className="mt-8 pt-4 pb-2 border-t border-outlineVariant/20 text-center">
+          <p className="text-[11px] text-onSurfaceVariant/60 font-medium">
+            {AppStrings.workDetailDataFooter(isEn)}
+          </p>
+        </div>
       </div>
     </div>
   );

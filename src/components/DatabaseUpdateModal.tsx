@@ -5,6 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { X, CheckCircle2, RefreshCw, Upload, AlertCircle, Database as DbIcon } from 'lucide-react';
 import { UpdateManager, UpdateCheckResult } from '../db/updateManager';
 import { LanguageManager } from '../theme/languageManager';
+import { AppStrings } from '../theme/strings';
 
 interface DatabaseUpdateModalProps {
   isOpen: boolean;
@@ -269,7 +270,10 @@ export const DatabaseUpdateModal: React.FC<DatabaseUpdateModalProps> = ({
 
         {/* フッター */}
         {!isUpdating && (
-          <div className="pt-3 border-t border-outlineVariant/20 flex justify-end">
+          <div className="pt-3 border-t border-outlineVariant/20 flex items-center justify-between">
+            <span className="text-[10px] text-onSurfaceVariant/60 font-medium">
+              {AppStrings.datasetAttribution(isEn)}
+            </span>
             <button
               onClick={onClose}
               className="px-4 py-2 rounded-xl text-xs font-bold text-onSurfaceVariant hover:text-onSurface"
