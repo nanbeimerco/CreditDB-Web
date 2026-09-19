@@ -4,6 +4,7 @@
 import React, { useState } from 'react';
 import { TierAnimeItem } from '../../types/tier';
 import { LanguageManager } from '../../theme/languageManager';
+import { getCoverImageUrl } from '../../utils/workImageResolver';
 import { MoreVertical, GripVertical } from 'lucide-react';
 
 interface TierAnimeCardProps {
@@ -30,8 +31,22 @@ const TierAnimeCardInternal: React.FC<TierAnimeCardProps> = ({
   onCardDragOver
 }) => {
   const [imgError, setImgError] = useState(false);
+  const [retryWithProxy, setRetryWithProxy] = useState(false);
   const isEn = LanguageManager.isEnglish;
   const title = isEn && anime.titleEn ? anime.titleEn : anime.title;
+
+  const rawImageUrl = anime.imageUrl || getCoverImageUrl(anime.id);
+  const displayUrl = retryWithProxy && rawImageUrl
+    ? `https://wsrv.nl/?url=${encodeURIComponent(rawImageUrl)}&w=200&output=jpg`
+    : rawImageUrl;
+
+  const handleImgError = () => {
+    if (!retryWithProxy && rawImageUrl && !rawImageUrl.includes('wsrv.nl')) {
+      setRetryWithProxy(true);
+    } else {
+      setImgError(true);
+    }
+  };
 
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData('text/plain', JSON.stringify({ animeId: anime.id, fromRowId: rowId }));
@@ -63,11 +78,11 @@ const TierAnimeCardInternal: React.FC<TierAnimeCardProps> = ({
     >
       {/* サムネイル画像 */}
       <div className="relative aspect-[3/4] bg-surfaceVariant/60 flex items-center justify-center overflow-hidden">
-        {anime.imageUrl && !imgError ? (
+        {displayUrl && !imgError ? (
           <img
-            src={anime.imageUrl}
+            src={displayUrl}
             alt={title}
-            onError={() => setImgError(true)}
+            onError={handleImgError}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
             loading="lazy"
             decoding="async"

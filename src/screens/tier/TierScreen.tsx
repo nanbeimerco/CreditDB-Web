@@ -11,6 +11,7 @@ import { TierCorrelationSheet } from './TierCorrelationSheet';
 import { TierExportDialog } from './TierExportDialog';
 import { CreditRepository } from '../../db/repository';
 import { useLanguage } from '../../theme/languageManager';
+import { getCoverImageUrl, ensureCoversLoaded } from '../../utils/workImageResolver';
 import { Trophy, Sparkles, Sliders, Share2 } from 'lucide-react';
 
 interface TierScreenProps {
@@ -62,27 +63,43 @@ export const TierScreen: React.FC<TierScreenProps> = ({
     }
   }, [snackbarMessage]);
 
-  // DBの最新スコア（偏差値、Tier等）とTier表の配置作品を自動同期
+  // DBの最新スコア（偏差値、Tier等）とTier表の配置作品を自動同期 & 画像URL欠落の自動補完 (Auto-heal)
   useEffect(() => {
-    try {
-      let changed = false;
-      const refreshedRows = config.rows.map(row => {
-        if (!row.items || row.items.length === 0) return row;
-        const refreshedItems = CreditRepository.refreshTierAnimeItems(row.items);
-        const hasDiff = refreshedItems.some((it, idx) => 
-          it.deviationScore !== row.items[idx]?.deviationScore || it.tier !== row.items[idx]?.tier
-        );
-        if (hasDiff) changed = true;
-        return { ...row, items: refreshedItems };
-      });
-      if (changed) {
-        const newConfig = { ...config, rows: refreshedRows };
-        setConfig(newConfig);
-        TierStorageManager.saveConfig(newConfig);
+    const syncTierData = async () => {
+      try {
+        await ensureCoversLoaded();
+        let changed = false;
+        const refreshedRows = config.rows.map(row => {
+          if (!row.items || row.items.length === 0) return row;
+          const refreshedItems = CreditRepository.refreshTierAnimeItems(row.items);
+          const healedItems = refreshedItems.map(it => {
+            if (!it.imageUrl) {
+              const coverUrl = getCoverImageUrl(it.id);
+              if (coverUrl) {
+                changed = true;
+                return { ...it, imageUrl: coverUrl };
+              }
+            }
+            return it;
+          });
+          const hasDiff = healedItems.some((it, idx) => 
+            it.deviationScore !== row.items[idx]?.deviationScore ||
+            it.tier !== row.items[idx]?.tier ||
+            it.imageUrl !== row.items[idx]?.imageUrl
+          );
+          if (hasDiff) changed = true;
+          return { ...row, items: healedItems };
+        });
+        if (changed) {
+          const newConfig = { ...config, rows: refreshedRows };
+          setConfig(newConfig);
+          TierStorageManager.saveConfig(newConfig);
+        }
+      } catch (e) {
+        console.warn('Failed to auto-refresh tier scores from DB:', e);
       }
-    } catch (e) {
-      console.warn('Failed to auto-refresh tier scores from DB:', e);
-    }
+    };
+    syncTierData();
   }, []);
 
   const updateAndPersistConfig = useCallback((newConfig: TierTableConfig) => {

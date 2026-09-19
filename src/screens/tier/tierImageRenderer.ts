@@ -1,5 +1,18 @@
 import { TierTableConfig, TierAnimeItem } from '../../types/tier';
 
+/**
+ * Canvas描画時にCORS 502 / Taint（汚染）エラーを回避するための安全な画像URLを取得
+ * api.bgm.tv はブラウザが Origin ヘッダーを送信すると HTTP 502 を返却するため、
+ * 高信頼なグローバル画像キャッシュプロキシ（wsrv.nl）を経由して Access-Control-Allow-Origin: * を確保する
+ */
+export function getCanvasSafeImageUrl(url: string): string {
+  if (!url) return url;
+  if (url.includes('api.bgm.tv')) {
+    return `https://wsrv.nl/?url=${encodeURIComponent(url)}`;
+  }
+  return url;
+}
+
 export interface TierImageExportOptions {
   scale: number; // 1.0: 1080p, 1.6: 2K, 2.5: 4K
   showTitle: boolean;
@@ -258,27 +271,40 @@ export async function renderTierCanvas(
   for (const row of config.rows) {
     for (const item of row.items) {
       if (item.imageUrl && !allImages.has(item.imageUrl)) {
+        const rawUrl = item.imageUrl;
+        const safeUrl = getCanvasSafeImageUrl(rawUrl);
         const p = new Promise<void>((resolve) => {
           const img = new Image();
           img.crossOrigin = 'anonymous';
           img.onload = () => {
-            allImages.set(item.imageUrl!, img);
+            allImages.set(rawUrl, img);
             resolve();
           };
           img.onerror = () => {
-            resolve(); // 失敗しても描画継続
+            if (safeUrl !== rawUrl) {
+              const fallbackImg = new Image();
+              fallbackImg.crossOrigin = 'anonymous';
+              fallbackImg.onload = () => {
+                allImages.set(rawUrl, fallbackImg);
+                resolve();
+              };
+              fallbackImg.onerror = () => resolve();
+              fallbackImg.src = rawUrl;
+            } else {
+              resolve();
+            }
           };
-          img.src = item.imageUrl!;
+          img.src = safeUrl;
         });
         imagePromises.push(p);
       }
     }
   }
 
-  // 最大2秒でタイムアウトして描画開始（画像が遅い場合でも固まらない）
+  // 最大6秒でタイムアウトして描画開始（画像が遅い場合でも十分な猶予を確保）
   await Promise.race([
     Promise.all(imagePromises),
-    new Promise((resolve) => setTimeout(resolve, 2000))
+    new Promise((resolve) => setTimeout(resolve, 6000))
   ]);
 
   // 3. 各Tier行の描画
