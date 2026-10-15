@@ -598,6 +598,65 @@ def recalculate_leaderboards_and_profiles(conn):
     conn.commit()
     print("  -> Leaderboards and profiles recalculation complete.")
 
+    # Resolve staff & cast tiers in works
+    print("  -> Resolving staff & cast tiers in works from leaderboards...")
+    cur.execute("SELECT role, name, rating_tier, cumulative_tier FROM leaderboards")
+    tier_map = {}
+    for role, name, r_tier, c_tier in cur.fetchall():
+        tier_map[(role, name)] = (r_tier, c_tier)
+        if role == "all":
+            tier_map[("fallback", name)] = (r_tier, c_tier)
+
+    cur.execute("SELECT work_id, staff_json, characters_json FROM works")
+    works = cur.fetchall()
+    updates = []
+    for wid, s_json, c_json in works:
+        changed = False
+        new_s_json = s_json
+        new_c_json = c_json
+        if s_json:
+            try:
+                s_map = json.loads(s_json)
+                for role, staff_list in s_map.items():
+                    if isinstance(staff_list, list):
+                        for item in staff_list:
+                            if isinstance(item, dict):
+                                name = item.get("name", "").strip()
+                                tiers = tier_map.get((role, name)) or tier_map.get(("fallback", name))
+                                if tiers:
+                                    r_t, c_t = tiers
+                                    if item.get("rt") != r_t or item.get("ct") != c_t:
+                                        item["rt"] = r_t
+                                        item["ct"] = c_t
+                                        changed = True
+                if changed:
+                    new_s_json = json.dumps(s_map, ensure_ascii=False)
+            except: pass
+        if c_json:
+            try:
+                c_list = json.loads(c_json)
+                if isinstance(c_list, list):
+                    for char in c_list:
+                        if isinstance(char, dict):
+                            actor_name = char.get("actor_name", "").strip()
+                            tiers = tier_map.get(("cv", actor_name)) or tier_map.get(("fallback", actor_name))
+                            if tiers:
+                                r_t, c_t = tiers
+                                if char.get("rt") != r_t or char.get("ct") != c_t:
+                                    char["rt"] = r_t
+                                    char["ct"] = c_t
+                                    changed = True
+                    if changed:
+                        new_c_json = json.dumps(c_list, ensure_ascii=False)
+            except: pass
+        if changed:
+            updates.append((new_s_json, new_c_json, wid))
+
+    if updates:
+        cur.executemany("UPDATE works SET staff_json = ?, characters_json = ? WHERE work_id = ?", updates)
+        conn.commit()
+        print(f"  -> Resolved staff & cast tiers for {len(updates)} works.")
+
 def main():
     print("===========================================================")
     print("  CreditDB for Web: 週次データ自動更新・同期バッチ (v2.0)")
