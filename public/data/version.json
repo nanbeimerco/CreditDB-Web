@@ -1,14 +1,14 @@
 {
-  "version": "2.2.0",
-  "updatedAt": "2026-10-16 09:40:00",
+  "version": "1.5.0",
+  "updatedAt": "2026-10-16 10:14:41",
   "totalWorks": 21728,
-  "totalStaff": 36795,
+  "totalStaff": 36807,
   "totalCv": 6100,
   "yearMin": 1950,
   "yearMax": 2026,
   "globalMean": 65.33864764938781,
   "dbFileName": "creditdb.db.gz",
-  "dbSizeCompressed": 46006847,
-  "dbSizeUncompressed": 218112000,
-  "sha256": "6c84111db86ae9b2ea32f1103743d717513bc67ff5a57ad85256a0eb5ce288bb"
+  "dbSizeCompressed": 45984210,
+  "dbSizeUncompressed": 218013696,
+  "sha256": "52e40ce927093451e71354703e135a6de16abe410940d91ee8825899b021aad0"
 }

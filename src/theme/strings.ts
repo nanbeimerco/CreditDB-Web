@@ -46,7 +46,7 @@ export const AppStrings = {
         case 'char_design': return 'キャラクターデザイン';
         case 'sakkan': return '作画監督';
         case 'genga': return '原画';
-        case 'unit_director': return '演出 / 副監督';
+        case 'unit_director': return '演出・絵コンテ';
         case 'music': return '音楽';
         case 'art_dir': return '美術監督';
         case 'cv': return '声優 / キャスト';
@@ -61,7 +61,7 @@ export const AppStrings = {
         case 'char_design': return 'Character Design';
         case 'sakkan': return 'Chief Animation Director / Sakkan';
         case 'genga': return 'Key Animation (Genga)';
-        case 'unit_director': return 'Unit Director / Assistant Director';
+        case 'unit_director': return 'Unit Director / Storyboard';
         case 'music': return 'Music / Soundtrack';
         case 'art_dir': return 'Art Director';
         case 'cv': return 'Voice Cast / CV';
@@ -81,7 +81,7 @@ export const AppStrings = {
         case 'char_design': return 'キャラデザ';
         case 'sakkan': return '作監';
         case 'genga': return '原画';
-        case 'unit_director': return '演出/副監督';
+        case 'unit_director': return '演出/絵コンテ';
         case 'music': return '音楽';
         case 'art_dir': return '美術監督';
         case 'cv': return '声優';

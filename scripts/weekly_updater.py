@@ -71,19 +71,13 @@ RELATION_MAP = {
     "演出助理": "unit_director",
     "助监督": "unit_director",
     "OP・ED 演出": "unit_director",
-    "分镜": "storyboard",
-    "OP・ED 分镜": "storyboard",
-    "分镜协力": "storyboard",
+    "分镜": "unit_director",
+    "OP・ED 分镜": "unit_director",
+    "分镜协力": "unit_director",
     "音乐": "music",
     "美术监督": "art_dir",
     "美术设计": "art_dir",
     "背景美术": "art_dir",
-    "色彩设计": "color_design",
-    "色彩指定": "color_design",
-    "摄影监督": "photo_dir",
-    "摄影": "photo_dir",
-    "音响监督": "sound_dir",
-    "音响": "sound_dir",
     "动画制作": "studio",
 }
 
@@ -177,22 +171,70 @@ def count_total_staff(staff_json_str: str) -> int:
         pass
     return 0
 
+EXCLUDED_STAFF_ROLES = {"color_design", "photo_dir", "sound_dir"}
+
+def sanitize_staff_dict(s_map: dict) -> tuple[dict, bool]:
+    """
+    Merges 'storyboard' into 'unit_director' without duplicate staff names,
+    excludes 'color_design', 'photo_dir', 'sound_dir', and deduplicates entries per role.
+    Returns (cleaned_dict, changed_flag).
+    """
+    if not isinstance(s_map, dict):
+        return {}, False
+
+    changed = False
+    cleaned = {}
+
+    # First copy all valid roles (excluding storyboard & EXCLUDED_STAFF_ROLES) with deduplication
+    for role, persons in s_map.items():
+        if role in EXCLUDED_STAFF_ROLES or role == "storyboard":
+            changed = True
+            continue
+        if isinstance(persons, list):
+            dedup_list = []
+            seen_names = set()
+            for p in persons:
+                p_name = (p.get("name") if isinstance(p, dict) else str(p) or "").strip()
+                if p_name:
+                    if p_name not in seen_names:
+                        dedup_list.append(p if isinstance(p, dict) else {"name": p_name, "rt": "B", "ct": "B"})
+                        seen_names.add(p_name)
+                    else:
+                        changed = True
+            cleaned[role] = dedup_list
+
+    # Merge storyboard into unit_director without duplicates
+    sb_list = s_map.get("storyboard")
+    if isinstance(sb_list, list) and sb_list:
+        changed = True
+        ud_list = cleaned.setdefault("unit_director", [])
+        ud_names = {(x.get("name") if isinstance(x, dict) else str(x) or "").strip() for x in ud_list}
+        for p in sb_list:
+            p_name = (p.get("name") if isinstance(p, dict) else str(p) or "").strip()
+            if p_name and p_name not in ud_names:
+                ud_list.append(p if isinstance(p, dict) else {"name": p_name, "rt": "B", "ct": "B"})
+                ud_names.add(p_name)
+
+    return cleaned, changed
+
 def merge_staff_dicts(old_json_str: str, new_dict: dict) -> dict:
     merged = {}
     if old_json_str:
         try:
             old_d = json.loads(old_json_str)
             if isinstance(old_d, dict):
+                old_d, _ = sanitize_staff_dict(old_d)
                 for k, v in old_d.items():
                     if isinstance(v, list):
                         merged[k] = list(v)
         except:
             pass
-    for role, persons in (new_dict or {}).items():
+    clean_new, _ = sanitize_staff_dict(new_dict or {})
+    for role, persons in clean_new.items():
         existing = merged.setdefault(role, [])
-        existing_names = {x.get("name") if isinstance(x, dict) else str(x) for x in existing}
+        existing_names = {(x.get("name") if isinstance(x, dict) else str(x) or "").strip() for x in existing}
         for p in persons:
-            p_name = p.get("name") if isinstance(p, dict) else str(p)
+            p_name = (p.get("name") if isinstance(p, dict) else str(p) or "").strip()
             if p_name and p_name not in existing_names:
                 existing.append(p if isinstance(p, dict) else {"name": p_name, "rt": "B", "ct": "B"})
                 existing_names.add(p_name)
@@ -570,6 +612,7 @@ def recalculate_all_metrics_and_resolve_tiers(conn):
     staff_overall = defaultdict(list)
     staff_by_role = defaultdict(list)
     rel_weights = {"主角": 1.0, "配角": 0.5, "客串": 0.2, "MAIN": 1.0, "SUPPORTING": 0.5, "BACKGROUND": 0.2}
+    sanitized_updates = []
 
     for wid, title, yr, s_json, c_json in all_works_data:
         year = int(yr or 0)
@@ -578,6 +621,9 @@ def recalculate_all_metrics_and_resolve_tiers(conn):
         if s_json:
             try:
                 s_map = json.loads(s_json)
+                s_map, was_sanitized = sanitize_staff_dict(s_map)
+                if was_sanitized:
+                    sanitized_updates.append((json.dumps(s_map, ensure_ascii=False), wid))
                 for role in ["director", "series_comp", "char_design", "unit_director", "sakkan", "music", "art_dir"]:
                     names = s_map.get(role, [])
                     if isinstance(names, str):
@@ -618,6 +664,11 @@ def recalculate_all_metrics_and_resolve_tiers(conn):
                         staff_by_role[("cv", aname)].append(rec)
             except:
                 pass
+
+    if sanitized_updates:
+        cur.executemany("UPDATE works SET staff_json = ? WHERE work_id = ?", sanitized_updates)
+        conn.commit()
+        print(f"  -> {len(sanitized_updates)} 作品の staff_json を正規化しました（storyboard -> unit_director 重複なし統合、不要役職除外）。")
 
     roles_list = ["all", "director", "series_comp", "char_design", "unit_director", "sakkan", "genga", "music", "art_dir", "cv"]
     lb_update_batch = []
@@ -996,11 +1047,17 @@ def main():
         except:
             pass
 
-    print("\n[2/6] AniList (季節別・放送中) & Bangumi Calendar (放送中番組表) を両方取得・統合中...")
     current_year = datetime.datetime.now().year
+    recalc_only = "--recalc-only" in sys.argv
 
-    anilist_list = fetch_comprehensive_anilist_anime(current_year)
-    bgm_cal_list = fetch_bangumi_calendar_anime()
+    if not recalc_only:
+        print("\n[2/6] AniList (季節別・放送中) & Bangumi Calendar (放送中番組表) を両方取得・統合中...")
+        anilist_list = fetch_comprehensive_anilist_anime(current_year)
+        bgm_cal_list = fetch_bangumi_calendar_anime()
+    else:
+        print("\n[2-3/6] --recalc-only モード: API取得をスキップし、全作品のスタッフ役職正規化・Tier再計算を実行します...")
+        anilist_list = []
+        bgm_cal_list = []
 
     # Merge AniList and Bangumi Calendar candidates using normalized title matching
     merged_candidates = []
@@ -1160,13 +1217,16 @@ def main():
             by_norm_title[normalize_for_match(title_ja)] = new_info
 
     # Step 3b: Sweep remaining unevaluated or under-staffed 2026 works in DB
-    print("\n  [3b] DB内の残存2026年作品（スコア未反映・スタッフ少）をスイープ補完中...")
-    cursor.execute("""
-        SELECT work_id, title, year, anilist_raw_score, staff_json, characters_json
-        FROM works
-        WHERE year = ? AND (anilist_raw_score <= 0.0 OR length(staff_json) < 800)
-    """, (current_year,))
-    rem_rows = cursor.fetchall()
+    if not recalc_only:
+        print("\n  [3b] DB内の残存2026年作品（スコア未反映・スタッフ少）をスイープ補完中...")
+        cursor.execute("""
+            SELECT work_id, title, year, anilist_raw_score, staff_json, characters_json
+            FROM works
+            WHERE year = ? AND (anilist_raw_score <= 0.0 OR length(staff_json) < 800)
+        """, (current_year,))
+        rem_rows = cursor.fetchall()
+    else:
+        rem_rows = []
     sweep_count = 0
     for wid, title, yr, sc, s_json, c_json in rem_rows:
         old_sc = float(sc or 0.0)
