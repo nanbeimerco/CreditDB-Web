@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Weekly CreditDB Auto-Updater (AniList GraphQL & Bangumi API)
+Weekly CreditDB Auto-Updater v3.0 (AniList GraphQL & Bangumi API)
 Executes weekly via GitHub Actions (or manually) to:
 1. Decompress public/data/creditdb.db.gz into SQLite memory
-2. Fetch recent/airing anime and latest scores from AniList API (multi-page)
-3. Enriches unevaluated works in DB via direct AniList search
-4. Enriches full staff and cast credits via Bangumi API (covering genga, sakkan, director, unit_director, art_dir, etc.)
-5. Recomputes Bayesian ratings and cumulative Z excluding unevaluated works (z=0)
-6. Updates leaderboards, profiles, and summary tables
-7. Re-compresses to public/data/creditdb.db.gz and updates public/data/version.json
+2. Fetch seasonal anime (WINTER, SPRING, SUMMER, FALL) and currently RELEASING anime from AniList API
+3. Always fetch currently airing anime from Bangumi Calendar API (/calendar) and merge via Smart Title Matching
+4. Enrich unevaluated works in DB via direct AniList search
+5. Dynamically refresh staff & cast credits via Bangumi API for all airing/recent/under-staffed works (capturing weekly episode staff & score changes)
+6. Recompute Era-adjusted Z-scores, Bayesian ratings S(a) (excluding Z=0 works), leaderboards, profiles, and resolve staff tiers (rt, ct) inside works
+7. Re-compress to public/data/creditdb.db.gz, update version.json & work_covers.json
 """
 
 import os
@@ -34,7 +34,7 @@ if sys.platform == "win32":
 
 ANILIST_ENDPOINT = "https://graphql.anilist.co"
 BANGUMI_ENDPOINT = "https://api.bgm.tv"
-USER_AGENT = "CreditDB-Web-Updater/2.0 (https://github.com/nanbeimerco/CreditDB-Web)"
+USER_AGENT = "CreditDB-Web-Updater/3.0 (https://github.com/nanbeimerco/CreditDB-Web)"
 
 DEFAULT_ROLE_M = {
     "director": 2.0,
@@ -88,9 +88,62 @@ RELATION_MAP = {
 }
 
 def norm(t):
-    if not t: return ''
-    t = unicodedata.normalize('NFKC', str(t)).lower()
-    return re.sub(r'[\s\-_・:：~〜\.\,\!\?！？\(\)（）「」『』【】〈〉\[\]/／]', '', t)
+    if not t:
+        return ""
+    t = unicodedata.normalize("NFKC", str(t)).lower()
+    return re.sub(r'[\s\-_・:：~〜\.\,\!\?！？\(\)（）「」『』【】〈〉\[\]/／★☆＆&]', '', t)
+
+def normalize_for_match(t: str) -> str:
+    """
+    Normalizes anime titles for smart cross-platform matching between AniList and Bangumi.
+    Unifies season markers (Season 2, 2nd Season, 第2期, II -> s2) and strips years/punctuation.
+    """
+    if not t:
+        return ""
+    s = unicodedata.normalize("NFKC", str(t)).lower()
+    # Remove broadcast year suffixes like (2024), (2026)
+    s = re.sub(r'\(20\d\d\)', ' ', s)
+    # Convert Kanji numbers in 第X期 / 第Xクール
+    kanji_map = {'一': '1', '二': '2', '三': '3', '四': '4', '五': '5', '六': '6', '七': '7', '八': '8', '九': '9'}
+    s = re.sub(r'第([一二三四五六七八九])(?:期|クール|章|部)', lambda m: f" s{kanji_map[m.group(1)]} ", s)
+    # Convert Season X, 第X期, Part X
+    s = re.sub(r'(?:season\s*|第\s*|part\s*|パート\s*)([0-9]+)(?:\s*期|\s*シーズン|\s*クール|\s*章|\s*部)?', r' s\1 ', s)
+    s = re.sub(r'([0-9]+)(?:st|nd|rd|th)\s*(?:season|シーズン|クール)', r' s\1 ', s)
+    s = re.sub(r'([0-9]+)\s*(?:期|クール)', r' s\1 ', s)
+    # Convert trailing or standalone Roman numerals (II, III, IV)
+    s = re.sub(r'(?:(?<=\s)|(?<=[^\x00-\x7f]))iii(?=\s|$)', ' s3 ', s)
+    s = re.sub(r'(?:(?<=\s)|(?<=[^\x00-\x7f]))ii(?=\s|$)', ' s2 ', s)
+    s = re.sub(r'(?:(?<=\s)|(?<=[^\x00-\x7f]))iv(?=\s|$)', ' s4 ', s)
+    # Strip punctuation and spaces
+    s = re.sub(r'[\s\-_・:：~〜\.\,\!\?！？\(\)（）「」『』【】〈〉\[\]/／★☆＆&]', '', s)
+    return s
+
+def extract_main_title_norm(t: str) -> str:
+    """
+    Extracts the main title before long subtitles (e.g. '～...～', '-...-', or space-separated light novel subtitles)
+    while preserving any season marker.
+    """
+    if not t:
+        return ""
+    s = unicodedata.normalize("NFKC", str(t))
+    # Detect season token from full title first
+    full_norm = normalize_for_match(s)
+    season_match = re.search(r'(s[2-9])$', full_norm)
+    season_suffix = season_match.group(1) if season_match else ""
+
+    # Strip ~subtitle~
+    s_base = re.sub(r'[~〜].*?[~〜]', '', s).strip()
+    # If there is a space and the first part is at least 5 chars, take the first part
+    parts = re.split(r'[\s　]+', s_base)
+    if len(parts) > 1 and len(parts[0]) >= 5:
+        # Check if parts[1] is not just a season marker
+        if not re.match(r'^(?:第?\d|season|part|ii|iii|iv|\d+(?:st|nd|rd|th))', parts[1].lower()):
+            s_base = parts[0]
+
+    base_norm = normalize_for_match(s_base)
+    if season_suffix and not base_norm.endswith(season_suffix):
+        base_norm += season_suffix
+    return base_norm
 
 def calculate_tier(rank: int, total: int) -> str:
     if total <= 0 or rank <= 0:
@@ -113,6 +166,60 @@ def calculate_tier(rank: int, total: int) -> str:
     else:
         return "D"
 
+def count_total_staff(staff_json_str: str) -> int:
+    if not staff_json_str:
+        return 0
+    try:
+        d = json.loads(staff_json_str)
+        if isinstance(d, dict):
+            return sum(len(v) for v in d.values() if isinstance(v, list))
+    except:
+        pass
+    return 0
+
+def merge_staff_dicts(old_json_str: str, new_dict: dict) -> dict:
+    merged = {}
+    if old_json_str:
+        try:
+            old_d = json.loads(old_json_str)
+            if isinstance(old_d, dict):
+                for k, v in old_d.items():
+                    if isinstance(v, list):
+                        merged[k] = list(v)
+        except:
+            pass
+    for role, persons in (new_dict or {}).items():
+        existing = merged.setdefault(role, [])
+        existing_names = {x.get("name") if isinstance(x, dict) else str(x) for x in existing}
+        for p in persons:
+            p_name = p.get("name") if isinstance(p, dict) else str(p)
+            if p_name and p_name not in existing_names:
+                existing.append(p if isinstance(p, dict) else {"name": p_name, "rt": "B", "ct": "B"})
+                existing_names.add(p_name)
+    return merged
+
+def merge_cast_lists(old_json_str: str, new_list: list) -> list:
+    merged = []
+    seen = set()
+    if old_json_str:
+        try:
+            old_l = json.loads(old_json_str)
+            if isinstance(old_l, list):
+                for c in old_l:
+                    if isinstance(c, dict) and c.get("actor_name"):
+                        key = (c.get("character_name", ""), c.get("actor_name", ""))
+                        merged.append(c)
+                        seen.add(key)
+        except:
+            pass
+    for c in (new_list or []):
+        if isinstance(c, dict) and c.get("actor_name"):
+            key = (c.get("character_name", ""), c.get("actor_name", ""))
+            if key not in seen:
+                merged.append(c)
+                seen.add(key)
+    return merged
+
 def execute_anilist_query(query: str, variables: dict = None, retries: int = 3):
     headers = {
         "Content-Type": "application/json",
@@ -124,101 +231,207 @@ def execute_anilist_query(query: str, variables: dict = None, retries: int = 3):
 
     for attempt in range(retries):
         try:
-            time.sleep(0.6)
+            time.sleep(0.55)
             with urllib.request.urlopen(req, timeout=15) as res:
                 if res.status == 200:
                     return json.loads(res.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             if e.code == 429:
-                wait_sec = int(e.headers.get("Retry-After", 5))
+                wait_sec = int(e.headers.get("Retry-After", 6))
                 print(f"[AniList] Rate limit reached. Waiting {wait_sec}s...")
                 time.sleep(wait_sec)
                 continue
-            print(f"[AniList] HTTP Error {e.code}: {e.reason}")
             break
         except Exception as e:
-            print(f"[AniList] Request failed: {e}")
             time.sleep(1.0)
     return None
 
-def fetch_recent_anilist_anime(target_years=[2025, 2026], max_pages=3, per_page=50):
-    print(f"[AniList] Fetching popular anime for years: {target_years} (up to {max_pages * per_page} per year)...")
-    query = """
-    query ($year: Int, $page: Int, $perPage: Int) {
+def fetch_comprehensive_anilist_anime(current_year: int):
+    """
+    Fetches:
+    1. All 4 seasons (WINTER, SPRING, SUMMER, FALL) for current_year and current_year - 1
+    2. Currently RELEASING anime across all years
+    3. Upcoming anime for current_year + 1
+    """
+    print(f"[AniList] Fetching seasonal & releasing anime around {current_year}...")
+    seasonal_query = """
+    query ($year: Int, $season: MediaSeason, $page: Int, $perPage: Int) {
       Page(page: $page, perPage: $perPage) {
-        pageInfo {
-          hasNextPage
-        }
-        media(type: ANIME, seasonYear: $year, sort: [POPULARITY_DESC, SCORE_DESC]) {
+        pageInfo { hasNextPage }
+        media(type: ANIME, seasonYear: $year, season: $season, sort: [POPULARITY_DESC, SCORE_DESC]) {
           id
-          title {
-            romaji
-            english
-            native
-          }
+          title { romaji english native }
           seasonYear
-          format
-          episodes
+          status
           averageScore
           meanScore
-          popularity
+          coverImage { large extraLarge }
         }
       }
     }
     """
-    results = []
-    for yr in target_years:
-        for page in range(1, max_pages + 1):
-            res = execute_anilist_query(query, {"year": yr, "page": page, "perPage": per_page})
-            if res and "data" in res and res["data"] and "Page" in res["data"]:
-                media_list = res["data"]["Page"].get("media", [])
-                for m in media_list:
-                    results.append({
-                        "id": f"anilist_{m['id']}",
-                        "title_ja": m.get("title", {}).get("native") or m.get("title", {}).get("romaji", ""),
-                        "title_en": m.get("title", {}).get("english") or "",
-                        "year": m.get("seasonYear") or yr,
-                        "score": float(m.get("averageScore") or m.get("meanScore") or 0.0),
-                        "bangumi_id": None
-                    })
-                if not res["data"]["Page"].get("pageInfo", {}).get("hasNextPage", False):
+    releasing_query = """
+    query ($page: Int, $perPage: Int) {
+      Page(page: $page, perPage: $perPage) {
+        pageInfo { hasNextPage }
+        media(type: ANIME, status: RELEASING, sort: [POPULARITY_DESC, SCORE_DESC]) {
+          id
+          title { romaji english native }
+          seasonYear
+          status
+          averageScore
+          meanScore
+          coverImage { large extraLarge }
+        }
+      }
+    }
+    """
+    by_id = {}
+
+    def add_media_items(media_list, fallback_year, force_airing=False):
+        for m in media_list:
+            aid = m["id"]
+            t_ja = m.get("title", {}).get("native") or m.get("title", {}).get("romaji") or ""
+            t_en = m.get("title", {}).get("english") or m.get("title", {}).get("romaji") or ""
+            yr = m.get("seasonYear") or fallback_year
+            sc = float(m.get("averageScore") or m.get("meanScore") or 0.0)
+            st = m.get("status") or ""
+            cov = (m.get("coverImage") or {}).get("large") or (m.get("coverImage") or {}).get("extraLarge")
+            by_id[aid] = {
+                "id": f"anime_{aid}",
+                "anilist_id": aid,
+                "title_ja": t_ja,
+                "title_en": t_en,
+                "year": yr,
+                "score": sc,
+                "is_airing": force_airing or (st == "RELEASING"),
+                "cover_url": cov,
+                "bangumi_id": None
+            }
+
+    # 1. Currently RELEASING anime (up to 3 pages = 150 items)
+    for page in range(1, 4):
+        res = execute_anilist_query(releasing_query, {"page": page, "perPage": 50})
+        if res and res.get("data", {}).get("Page"):
+            pg = res["data"]["Page"]
+            add_media_items(pg.get("media", []), current_year, force_airing=True)
+            if not pg.get("pageInfo", {}).get("hasNextPage"):
+                break
+    print(f"  -> Fetched {len(by_id)} currently releasing anime from AniList.")
+
+    # 2. Seasonal anime for current_year (all 4 seasons, up to 2 pages = 100 per season)
+    for season in ["WINTER", "SPRING", "SUMMER", "FALL"]:
+        for page in range(1, 3):
+            res = execute_anilist_query(seasonal_query, {"year": current_year, "season": season, "page": page, "perPage": 50})
+            if res and res.get("data", {}).get("Page"):
+                pg = res["data"]["Page"]
+                add_media_items(pg.get("media", []), current_year, force_airing=(season == "FALL"))
+                if not pg.get("pageInfo", {}).get("hasNextPage"):
                     break
-        print(f"  -> Year {yr}: fetched {len(results)} anime entries so far")
-    return results
+    print(f"  -> Total unique AniList entries after {current_year} seasonal scan: {len(by_id)}")
+
+    # 3. Previous year top seasonal works (1 page per season)
+    for season in ["WINTER", "SPRING", "SUMMER", "FALL"]:
+        res = execute_anilist_query(seasonal_query, {"year": current_year - 1, "season": season, "page": 1, "perPage": 50})
+        if res and res.get("data", {}).get("Page"):
+            add_media_items(res["data"]["Page"].get("media", []), current_year - 1, force_airing=False)
+
+    print(f"  -> Total unique AniList entries collected: {len(by_id)}")
+    return list(by_id.values())
 
 def search_anilist_by_title(title: str):
     terms = [title]
     t_clean = re.sub(r'\(20\d\d\)', '', title).strip()
-    if t_clean != title:
+    if t_clean and t_clean not in terms:
         terms.append(t_clean)
-    t_clean2 = re.sub(r'第\d+期', '', t_clean).strip()
-    if t_clean2 and t_clean2 not in terms:
-        terms.append(t_clean2)
+    # Also try main title if subtitle is long
+    parts = re.split(r'[\s　〜~]+', t_clean)
+    if len(parts) > 1 and len(parts[0]) >= 5:
+        if parts[0] not in terms:
+            terms.append(parts[0])
 
     query = """
     query ($search: String) {
-      Media(search: $search, type: ANIME) {
-        id
-        title {
-          native
-          romaji
-          english
+      Page(page: 1, perPage: 5) {
+        media(search: $search, type: ANIME, sort: [POPULARITY_DESC]) {
+          id
+          title { native romaji english }
+          seasonYear
+          status
+          averageScore
+          meanScore
+          coverImage { large }
         }
-        seasonYear
-        averageScore
-        meanScore
       }
     }
     """
-    for term in terms:
-        if not term: continue
+    target_norm = normalize_for_match(title)
+    target_main = extract_main_title_norm(title)
+
+    for term in terms[:2]:
+        if not term:
+            continue
         res = execute_anilist_query(query, {"search": term})
-        if res and "data" in res and res["data"] and res["data"].get("Media"):
-            m = res["data"]["Media"]
-            score = float(m.get("averageScore") or m.get("meanScore") or 0.0)
-            if score > 0:
-                return m, score
+        if res and res.get("data", {}).get("Page", {}).get("media"):
+            media_list = res["data"]["Page"]["media"]
+            # Prefer exact normalized match first
+            for m in media_list:
+                m_ja = m.get("title", {}).get("native") or ""
+                m_ro = m.get("title", {}).get("romaji") or ""
+                m_en = m.get("title", {}).get("english") or ""
+                for cand_t in [m_ja, m_ro, m_en]:
+                    if not cand_t:
+                        continue
+                    c_norm = normalize_for_match(cand_t)
+                    c_main = extract_main_title_norm(cand_t)
+                    if c_norm == target_norm or (len(target_main) >= 5 and c_main == target_main):
+                        sc = float(m.get("averageScore") or m.get("meanScore") or 0.0)
+                        return m, sc
+            # Fallback to first result if year is >= 2024 and search term was specific
+            m0 = media_list[0]
+            if (m0.get("seasonYear") or 0) >= 2024 and len(target_norm) >= 6:
+                sc = float(m0.get("averageScore") or m0.get("meanScore") or 0.0)
+                return m0, sc
     return None, 0.0
+
+def fetch_bangumi_calendar_anime():
+    print("[Bangumi] Fetching currently airing anime via Calendar API (/calendar)...")
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+    req = urllib.request.Request(f"{BANGUMI_ENDPOINT}/calendar", headers=headers)
+    results = []
+    current_year = datetime.datetime.now().year
+
+    try:
+        with urllib.request.urlopen(req, timeout=15) as res:
+            if res.status == 200:
+                calendar_days = json.loads(res.read().decode("utf-8"))
+                for day in calendar_days:
+                    for item in day.get("items", []):
+                        title_ja = (item.get("name") or item.get("name_cn") or "").strip()
+                        if not title_ja:
+                            continue
+                        air_date = item.get("air_date") or ""
+                        year = int(air_date[:4]) if len(air_date) >= 4 and air_date[:4].isdigit() else current_year
+                        rating = item.get("rating") or {}
+                        score_10 = float(rating.get("score") or 0.0)
+                        bgm_score_100 = round(score_10 * 10.0, 1) if score_10 > 0 else 0.0
+
+                        results.append({
+                            "id": f"anime_bgm_{item['id']}",
+                            "anilist_id": None,
+                            "title_ja": title_ja,
+                            "title_en": item.get("name_cn") or "",
+                            "year": year,
+                            "score": 0.0, # Will be enriched via AniList matching first, fallback to bgm_score_100
+                            "bgm_score": bgm_score_100,
+                            "is_airing": True,
+                            "cover_url": None,
+                            "bangumi_id": int(item["id"])
+                        })
+                print(f"  -> Fetched {len(results)} airing titles from Bangumi Calendar")
+    except Exception as e:
+        print(f"[Bangumi] Calendar request error: {e}")
+    return results
 
 def fetch_bangumi_staff_and_cast(title_jp: str, subject_id: int = None):
     headers = {
@@ -228,26 +441,30 @@ def fetch_bangumi_staff_and_cast(title_jp: str, subject_id: int = None):
     }
     try:
         if not subject_id:
-            search_url = f"{BANGUMI_ENDPOINT}/v0/search/subjects?limit=1"
+            search_url = f"{BANGUMI_ENDPOINT}/v0/search/subjects?limit=3"
             payload = json.dumps({"keyword": title_jp, "filter": {"type": [2]}}).encode("utf-8")
             req = urllib.request.Request(search_url, data=payload, headers=headers, method="POST")
-            time.sleep(0.3)
+            time.sleep(0.25)
             with urllib.request.urlopen(req, timeout=12) as res:
-                if res.status != 200:
-                    return {}, []
-                data = json.loads(res.read().decode("utf-8"))
-                items = data.get("data", [])
-                if not items:
-                    return {}, []
-                subject_id = items[0].get("id")
+                if res.status == 200:
+                    data = json.loads(res.read().decode("utf-8"))
+                    items = data.get("data", [])
+                    if items:
+                        target_n = normalize_for_match(title_jp)
+                        chosen_id = items[0].get("id")
+                        for it in items:
+                            if normalize_for_match(it.get("name", "")) == target_n or normalize_for_match(it.get("name_cn", "")) == target_n:
+                                chosen_id = it.get("id")
+                                break
+                        subject_id = chosen_id
 
         if not subject_id:
-            return {}, []
+            return {}, [], None
 
         # 1. Fetch Staff (Persons)
         persons_url = f"{BANGUMI_ENDPOINT}/v0/subjects/{subject_id}/persons"
         req = urllib.request.Request(persons_url, headers=headers, method="GET")
-        time.sleep(0.3)
+        time.sleep(0.25)
         staff_by_role = {}
         with urllib.request.urlopen(req, timeout=12) as res:
             if res.status == 200:
@@ -264,7 +481,7 @@ def fetch_bangumi_staff_and_cast(title_jp: str, subject_id: int = None):
         # 2. Fetch Characters & Cast
         chars_url = f"{BANGUMI_ENDPOINT}/v0/subjects/{subject_id}/characters"
         req = urllib.request.Request(chars_url, headers=headers, method="GET")
-        time.sleep(0.3)
+        time.sleep(0.25)
         cast_list = []
         with urllib.request.urlopen(req, timeout=12) as res:
             if res.status == 200:
@@ -285,13 +502,13 @@ def fetch_bangumi_staff_and_cast(title_jp: str, subject_id: int = None):
                             })
                             break
 
-        return staff_by_role, cast_list
+        return staff_by_role, cast_list, subject_id
     except Exception as e:
-        print(f"[Bangumi] Fetch error for '{title_jp}': {e}")
-        return {}, []
+        print(f"[Bangumi] Fetch error for '{title_jp}' (sid={subject_id}): {e}")
+        return {}, [], subject_id
 
-def recalculate_leaderboards_and_profiles(conn):
-    print("  -> Recalculating leaderboards and profiles excluding Z=0 works...")
+def recalculate_all_metrics_and_resolve_tiers(conn):
+    print("\n[4/6] 全作品の時代補正Zスコア・偏差値 & 全スタッフ実力S(a)（Z=0除外）を再計算中...")
     cur = conn.cursor()
 
     cur.execute("SELECT work_id, year, anilist_raw_score FROM works")
@@ -328,6 +545,25 @@ def recalculate_leaderboards_and_profiles(conn):
         work_zscores[wid] = z
         work_devscores[wid] = dev
 
+    sorted_by_z = sorted(scored_items.keys(), key=lambda w: work_zscores[w], reverse=True)
+    total_scored = len(sorted_by_z)
+
+    works_update_batch = []
+    for rank, wid in enumerate(sorted_by_z, start=1):
+        z = work_zscores[wid]
+        dev = work_devscores[wid]
+        tier = calculate_tier(rank, total_scored)
+        pct = round((1.0 - (rank - 1) / max(1, total_scored)) * 100, 1)
+        works_update_batch.append((round(z, 3), round(dev, 1), tier, rank, pct, wid))
+
+    cur.executemany("""
+        UPDATE works
+        SET true_z_score = ?, deviation_score = ?, tier = ?, z_score_rank = ?, percentile = ?
+        WHERE work_id = ?;
+    """, works_update_batch)
+    conn.commit()
+    print(f"  -> {len(works_update_batch)} 評価済み作品のZスコア・偏差値・Tierを更新しました。")
+
     cur.execute("SELECT work_id, title, year, staff_json, characters_json FROM works")
     all_works_data = cur.fetchall()
 
@@ -344,7 +580,8 @@ def recalculate_leaderboards_and_profiles(conn):
                 s_map = json.loads(s_json)
                 for role in ["director", "series_comp", "char_design", "unit_director", "sakkan", "music", "art_dir"]:
                     names = s_map.get(role, [])
-                    if isinstance(names, str): names = [names]
+                    if isinstance(names, str):
+                        names = [names]
                     for n in names:
                         name = n.get("name") if isinstance(n, dict) else str(n)
                         name = name.strip() if name else ""
@@ -362,7 +599,8 @@ def recalculate_leaderboards_and_profiles(conn):
                             rec = {"work_id": wid, "title": title, "year": year, "role": "genga", "z": z, "w": 1.0}
                             staff_overall[name].append(rec)
                             staff_by_role[("genga", name)].append(rec)
-            except: pass
+            except:
+                pass
 
         if c_json:
             try:
@@ -378,7 +616,8 @@ def recalculate_leaderboards_and_profiles(conn):
                         rec = {"work_id": wid, "title": title, "year": year, "role": "cv", "z": z, "w": w, "top_char": f"{cname} ({rel})"}
                         staff_overall[aname].append(rec)
                         staff_by_role[("cv", aname)].append(rec)
-            except: pass
+            except:
+                pass
 
     roles_list = ["all", "director", "series_comp", "char_design", "unit_director", "sakkan", "genga", "music", "art_dir", "cv"]
     lb_update_batch = []
@@ -420,7 +659,8 @@ def recalculate_leaderboards_and_profiles(conn):
                 })
         else:
             for (role, name), recs in staff_by_role.items():
-                if role != rKey: continue
+                if role != rKey:
+                    continue
                 eval_recs = [r for r in recs if abs(r["z"]) > 1e-6]
                 if eval_recs:
                     w_sum = sum(r["w"] for r in eval_recs)
@@ -533,7 +773,8 @@ def recalculate_leaderboards_and_profiles(conn):
     prof_batch = []
     for name, roles in staff_lb_map.items():
         all_stat = roles.get("all")
-        if not all_stat: continue
+        if not all_stat:
+            continue
 
         sub_roles = [st for r, st in roles.items() if r != "all"]
         sub_roles.sort(key=lambda s: s["works_count"], reverse=True)
@@ -596,10 +837,10 @@ def recalculate_leaderboards_and_profiles(conn):
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
     """, prof_batch)
     conn.commit()
-    print("  -> Leaderboards and profiles recalculation complete.")
+    print(f"  -> {len(prof_batch)} 名のスタッフプロファイルを再構築しました。")
 
     # Resolve staff & cast tiers in works
-    print("  -> Resolving staff & cast tiers in works from leaderboards...")
+    print("  -> 各作品の staff_json / characters_json に最新のスタッフTier (rt, ct) を反映中...")
     cur.execute("SELECT role, name, rating_tier, cumulative_tier FROM leaderboards")
     tier_map = {}
     for role, name, r_tier, c_tier in cur.fetchall():
@@ -631,7 +872,8 @@ def recalculate_leaderboards_and_profiles(conn):
                                         changed = True
                 if changed:
                     new_s_json = json.dumps(s_map, ensure_ascii=False)
-            except: pass
+            except:
+                pass
         if c_json:
             try:
                 c_list = json.loads(c_json)
@@ -648,31 +890,92 @@ def recalculate_leaderboards_and_profiles(conn):
                                     changed = True
                     if changed:
                         new_c_json = json.dumps(c_list, ensure_ascii=False)
-            except: pass
+            except:
+                pass
         if changed:
             updates.append((new_s_json, new_c_json, wid))
 
     if updates:
         cur.executemany("UPDATE works SET staff_json = ?, characters_json = ? WHERE work_id = ?", updates)
         conn.commit()
-        print(f"  -> Resolved staff & cast tiers for {len(updates)} works.")
+        print(f"  -> {len(updates)} 作品のスタッフ・キャストTierを更新しました。")
+
+def build_db_lookup_index(cursor):
+    """Builds fast lookup indices for matching existing DB works by ID, normalized title, and main title."""
+    cursor.execute("SELECT work_id, title, title_en, year, anilist_raw_score, staff_json, characters_json FROM works")
+    by_id = {}
+    by_norm_title = {}
+    by_main_title_year = {}
+
+    for row in cursor.fetchall():
+        wid, title, title_en, yr, sc, s_json, c_json = row
+        info = {
+            "work_id": wid,
+            "title": title or "",
+            "title_en": title_en or "",
+            "year": int(yr or 0),
+            "score": float(sc or 0.0),
+            "staff_json": s_json or "{}",
+            "characters_json": c_json or "[]"
+        }
+        by_id[wid] = info
+        for t in [title, title_en]:
+            if t:
+                nt = normalize_for_match(t)
+                if nt:
+                    # Prefer works with higher staff count or existing score if duplicate norm title exists
+                    if nt not in by_norm_title or info["score"] > by_norm_title[nt]["score"]:
+                        by_norm_title[nt] = info
+                mt = extract_main_title_norm(t)
+                if mt and len(mt) >= 6:
+                    for y_off in (0, -1, 1):
+                        key = (mt, info["year"] + y_off)
+                        if key not in by_main_title_year:
+                            by_main_title_year[key] = info
+
+    return by_id, by_norm_title, by_main_title_year
+
+def match_existing_work(cand, by_id, by_norm_title, by_main_title_year):
+    # 1. Direct ID match
+    for cand_id in [cand.get("id"), f"anime_{cand.get('anilist_id')}", f"anilist_{cand.get('anilist_id')}", f"anime_bgm_{cand.get('bangumi_id')}"]:
+        if cand_id and cand_id in by_id:
+            return by_id[cand_id]
+
+    # 2. Normalized title match
+    for t in [cand.get("title_ja"), cand.get("title_en")]:
+        if t:
+            nt = normalize_for_match(t)
+            if nt and nt in by_norm_title:
+                return by_norm_title[nt]
+
+    # 3. Main title + year match (absorbs long light novel subtitle differences)
+    yr = int(cand.get("year") or 0)
+    for t in [cand.get("title_ja"), cand.get("title_en")]:
+        if t:
+            mt = extract_main_title_norm(t)
+            if mt and len(mt) >= 6 and yr > 0:
+                if (mt, yr) in by_main_title_year:
+                    return by_main_title_year[(mt, yr)]
+
+    return None
 
 def main():
-    print("===========================================================")
-    print("  CreditDB for Web: 週次データ自動更新・同期バッチ (v2.0)")
-    print("===========================================================")
+    print("=================================================================")
+    print("  CreditDB: 週次データ自動更新・放送中アニメ動的追跡バッチ v3.0")
+    print("=================================================================")
 
     script_dir = Path(__file__).resolve().parent
     web_root = script_dir.parent
     public_data_dir = web_root / "public" / "data"
     gz_db_path = public_data_dir / "creditdb.db.gz"
     version_json_path = public_data_dir / "version.json"
+    covers_json_path = public_data_dir / "work_covers.json"
 
     if not gz_db_path.exists():
         print(f"[ERROR] {gz_db_path} が見つかりません。")
         sys.exit(1)
 
-    print(f"[1/5] 既存データベースを展開中: {gz_db_path.name}...")
+    print(f"[1/6] 既存データベースを展開中: {gz_db_path.name}...")
     with gzip.open(gz_db_path, "rb") as f_in:
         db_bytes = f_in.read()
 
@@ -684,78 +987,150 @@ def main():
     prev_summary = cursor.fetchone() or (5452, 22896, 5840, 65.0)
     print(f"  -> 現在登録数: {prev_summary[0]} 作品 / 平均スコア: {prev_summary[3]:.1f}")
 
-    print("\n[2/5] アニメ最新情報を AniList API より取得中...")
+    # Load work_covers.json if available
+    work_covers = {}
+    if covers_json_path.exists():
+        try:
+            with open(covers_json_path, "r", encoding="utf-8") as fc:
+                work_covers = json.load(fc)
+        except:
+            pass
+
+    print("\n[2/6] AniList (季節別・放送中) & Bangumi Calendar (放送中番組表) を両方取得・統合中...")
     current_year = datetime.datetime.now().year
-    target_years = [current_year - 1, current_year, current_year + 1]
 
-    anime_candidates = fetch_recent_anilist_anime(target_years=target_years, max_pages=3, per_page=50)
+    anilist_list = fetch_comprehensive_anilist_anime(current_year)
+    bgm_cal_list = fetch_bangumi_calendar_anime()
 
-    # Also search directly for any unevaluated recent works in DB
-    print("\n  [2b] DB内の未評価作品を検索・補完中...")
-    cursor.execute("SELECT work_id, title, year FROM works WHERE (anilist_raw_score = 0.0 OR anilist_raw_score IS NULL) AND year >= ? ORDER BY year DESC LIMIT 30", (current_year - 2,))
-    uneval_works = cursor.fetchall()
-    for wid, title, yr in uneval_works:
-        m, sc = search_anilist_by_title(title)
-        if sc > 0:
-            print(f"  -> スコア補完: {title} ({wid}) - Score: {sc}")
-            anime_candidates.append({
-                "id": wid,
-                "title_ja": title,
-                "title_en": m.get("title", {}).get("english") or "",
-                "year": yr,
-                "score": sc,
-                "bangumi_id": int(wid.replace("anime_bgm_", "")) if wid.startswith("anime_bgm_") else None
-            })
+    # Merge AniList and Bangumi Calendar candidates using normalized title matching
+    merged_candidates = []
+    norm_to_cand = {}
 
-    print(f"  -> 合計 {len(anime_candidates)} 作品の候補を精査します。")
+    for item in anilist_list:
+        merged_candidates.append(item)
+        for t in [item["title_ja"], item["title_en"]]:
+            nt = normalize_for_match(t)
+            if nt:
+                norm_to_cand[nt] = item
+            mt = extract_main_title_norm(t)
+            if mt and len(mt) >= 6:
+                norm_to_cand[mt] = item
 
-    updated_count = 0
+    for b_item in bgm_cal_list:
+        nt_ja = normalize_for_match(b_item["title_ja"])
+        mt_ja = extract_main_title_norm(b_item["title_ja"])
+        matched = norm_to_cand.get(nt_ja) or (norm_to_cand.get(mt_ja) if len(mt_ja) >= 6 else None)
+        if matched:
+            matched["bangumi_id"] = b_item["bangumi_id"]
+            matched["is_airing"] = True
+        else:
+            # Query AniList specifically for this Bangumi Calendar anime
+            m_ani, sc_ani = search_anilist_by_title(b_item["title_ja"])
+            if m_ani:
+                b_item["score"] = sc_ani
+                b_item["anilist_id"] = m_ani.get("id")
+                if m_ani.get("title", {}).get("english"):
+                    b_item["title_en"] = m_ani["title"]["english"]
+                cov = (m_ani.get("coverImage") or {}).get("large")
+                if cov:
+                    b_item["cover_url"] = cov
+            merged_candidates.append(b_item)
+            if nt_ja:
+                norm_to_cand[nt_ja] = b_item
+
+    print(f"  -> 統合後の精査対象候補: {len(merged_candidates)} 作品 (うち現在放送中: {sum(1 for x in merged_candidates if x.get('is_airing'))} 作品)")
+
+    print("\n[3/6] データベース照合・スコア更新・放送中スタッフ動的取得中...")
+    by_id, by_norm_title, by_main_title_year = build_db_lookup_index(cursor)
+
+    updated_score_count = 0
+    updated_staff_count = 0
     new_count = 0
 
-    print("\n[3/5] データベースレコードを照合・更新中...")
-    for anime in anime_candidates:
-        work_id = anime["id"]
+    for anime in merged_candidates:
         title_ja = anime["title_ja"]
         title_en = anime["title_en"]
         year = anime["year"]
-        raw_score = anime["score"]
+        raw_score = float(anime["score"] or 0.0)
         bangumi_id = anime.get("bangumi_id")
+        is_airing = anime.get("is_airing", False)
+        cover_url = anime.get("cover_url")
 
         if not title_ja:
             continue
 
-        cursor.execute("SELECT work_id, anilist_raw_score, deviation_score, length(staff_json) FROM works WHERE work_id = ? OR title = ?", (work_id, title_ja))
-        row = cursor.fetchone()
+        existing = match_existing_work(anime, by_id, by_norm_title, by_main_title_year)
 
-        dev_score = round(max(30.0, min(85.0, (float(raw_score) - 65.0) / 9.8 * 10.0 + 50.0)), 1) if raw_score > 0 else 50.0
+        if existing:
+            db_work_id = existing["work_id"]
+            old_raw = existing["score"]
+            old_staff_json = existing["staff_json"]
+            old_chars_json = existing["characters_json"]
+            old_staff_count = count_total_staff(old_staff_json)
 
-        if row:
-            db_work_id, old_raw, old_dev, staff_len = row
-            needs_update = False
-            if raw_score > 0 and (old_raw is None or old_raw == 0.0 or abs(old_raw - raw_score) >= 0.5):
+            # Extract bangumi_id from db_work_id if it starts with anime_bgm_
+            if not bangumi_id and db_work_id.startswith("anime_bgm_"):
+                try:
+                    bangumi_id = int(db_work_id.replace("anime_bgm_", ""))
+                except:
+                    pass
+
+            # Update cover mapping
+            if db_work_id not in work_covers:
+                if bangumi_id:
+                    work_covers[db_work_id] = bangumi_id
+                elif cover_url:
+                    work_covers[db_work_id] = cover_url
+
+            # 1. Dynamic Score Update (even 0.1pt change or newly scored)
+            if raw_score > 0 and (old_raw <= 0.0 or abs(old_raw - raw_score) >= 0.1):
+                dev_score = round(max(30.0, min(85.0, (raw_score - 65.0) / 9.8 * 10.0 + 50.0)), 1)
                 cursor.execute("""
-                UPDATE works SET anilist_raw_score = ?, deviation_score = ? WHERE work_id = ?
+                    UPDATE works SET anilist_raw_score = ?, deviation_score = ? WHERE work_id = ?
                 """, (raw_score, dev_score, db_work_id))
-                needs_update = True
-            
-            # Enrich staff if existing staff count is too small (< 15 characters in json)
-            if staff_len is None or staff_len < 100:
-                s_dict, c_list = fetch_bangumi_staff_and_cast(title_ja, subject_id=bangumi_id)
-                if s_dict:
-                    cursor.execute("UPDATE works SET staff_json = ?, characters_json = ? WHERE work_id = ?",
-                                   (json.dumps(s_dict, ensure_ascii=False), json.dumps(c_list, ensure_ascii=False), db_work_id))
-                    needs_update = True
+                existing["score"] = raw_score
+                updated_score_count += 1
+                print(f"  [SCORE] {existing['title']} ({db_work_id}): {old_raw} -> {raw_score}")
 
-            if needs_update:
-                updated_count += 1
+            # 2. Dynamic Staff & Cast Refresh for airing works or under-staffed recent works
+            should_refresh_staff = (
+                is_airing
+                or (year >= current_year and old_staff_count < 35)
+                or (old_staff_count < 15)
+            )
+            if should_refresh_staff:
+                s_dict, c_list, resolved_bgm_id = fetch_bangumi_staff_and_cast(title_ja, subject_id=bangumi_id)
+                if resolved_bgm_id and db_work_id not in work_covers:
+                    work_covers[db_work_id] = resolved_bgm_id
+                if s_dict or c_list:
+                    merged_s = merge_staff_dicts(old_staff_json, s_dict)
+                    merged_c = merge_cast_lists(old_chars_json, c_list)
+                    new_staff_count = sum(len(v) for v in merged_s.values())
+                    if new_staff_count > old_staff_count or len(merged_c) > len(json.loads(old_chars_json or "[]")):
+                        new_s_str = json.dumps(merged_s, ensure_ascii=False)
+                        new_c_str = json.dumps(merged_c, ensure_ascii=False)
+                        cursor.execute("""
+                            UPDATE works SET staff_json = ?, characters_json = ? WHERE work_id = ?
+                        """, (new_s_str, new_c_str, db_work_id))
+                        existing["staff_json"] = new_s_str
+                        existing["characters_json"] = new_c_str
+                        updated_staff_count += 1
+                        print(f"  [STAFF] {existing['title']} ({db_work_id}): スタッフ {old_staff_count}名 -> {new_staff_count}名 / キャスト {len(merged_c)}名")
         else:
-            print(f"  [NEW] 新着作品を検知: {title_ja} ({year}) - Score: {raw_score}")
-            staff_dict, cast_list = fetch_bangumi_staff_and_cast(title_ja, subject_id=bangumi_id)
+            # New work not yet in DB
+            work_id = anime["id"]
+            s_dict, c_list, resolved_bgm_id = fetch_bangumi_staff_and_cast(title_ja, subject_id=bangumi_id)
+            if resolved_bgm_id:
+                work_covers[work_id] = resolved_bgm_id
+            elif cover_url:
+                work_covers[work_id] = cover_url
 
+            dev_score = round(max(30.0, min(85.0, (raw_score - 65.0) / 9.8 * 10.0 + 50.0)), 1) if raw_score > 0 else 50.0
             tier = "S+" if dev_score >= 70.0 else "S" if dev_score >= 65.0 else "A" if dev_score >= 58.0 else "B" if dev_score >= 50.0 else "C"
             title_norm = norm(title_ja)
-            staff_json = json.dumps(staff_dict, ensure_ascii=False)
-            chars_json = json.dumps(cast_list, ensure_ascii=False)
+            staff_json = json.dumps(s_dict, ensure_ascii=False)
+            chars_json = json.dumps(c_list, ensure_ascii=False)
+            s_cnt = sum(len(v) for v in s_dict.values())
 
             cursor.execute("""
             INSERT INTO works (
@@ -769,14 +1144,59 @@ def main():
                 dev_score, raw_score, tier, staff_json, chars_json, title_norm
             ))
             new_count += 1
+            print(f"  [NEW] 新規作品登録: {title_ja} ({work_id}, {year}年) - Score: {raw_score} / スタッフ: {s_cnt}名 / キャスト: {len(c_list)}名")
+
+            # Add to lookup index so we don't insert duplicates in the same run
+            new_info = {
+                "work_id": work_id,
+                "title": title_ja,
+                "title_en": title_en,
+                "year": year,
+                "score": raw_score,
+                "staff_json": staff_json,
+                "characters_json": chars_json
+            }
+            by_id[work_id] = new_info
+            by_norm_title[normalize_for_match(title_ja)] = new_info
+
+    # Step 3b: Sweep remaining unevaluated or under-staffed 2026 works in DB
+    print("\n  [3b] DB内の残存2026年作品（スコア未反映・スタッフ少）をスイープ補完中...")
+    cursor.execute("""
+        SELECT work_id, title, year, anilist_raw_score, staff_json, characters_json
+        FROM works
+        WHERE year = ? AND (anilist_raw_score <= 0.0 OR length(staff_json) < 800)
+    """, (current_year,))
+    rem_rows = cursor.fetchall()
+    sweep_count = 0
+    for wid, title, yr, sc, s_json, c_json in rem_rows:
+        old_sc = float(sc or 0.0)
+        old_s_cnt = count_total_staff(s_json)
+        # Only query Bangumi directly if it's a bgm work with < 20 staff
+        if wid.startswith("anime_bgm_") and old_s_cnt < 20:
+            try:
+                bid = int(wid.replace("anime_bgm_", ""))
+                s_dict, c_list, _ = fetch_bangumi_staff_and_cast(title, subject_id=bid)
+                if s_dict or c_list:
+                    merged_s = merge_staff_dicts(s_json, s_dict)
+                    merged_c = merge_cast_lists(c_json, c_list)
+                    new_s_cnt = sum(len(v) for v in merged_s.values())
+                    if new_s_cnt > old_s_cnt:
+                        cursor.execute("UPDATE works SET staff_json = ?, characters_json = ? WHERE work_id = ?",
+                                       (json.dumps(merged_s, ensure_ascii=False), json.dumps(merged_c, ensure_ascii=False), wid))
+                        updated_staff_count += 1
+                        sweep_count += 1
+            except:
+                pass
+        if sweep_count >= 60:
+            break
 
     conn.commit()
-    print(f"  -> 更新完了: スコア改定 {updated_count} 作品 / 新規登録 {new_count} 作品")
+    print(f"  -> 照合完了: スコア更新 {updated_score_count} 件 / スタッフ増分更新 {updated_staff_count} 件 / 新規追加 {new_count} 件")
 
-    if updated_count > 0 or new_count > 0:
-        recalculate_leaderboards_and_profiles(conn)
+    # Step 4: Recalculate all metrics & resolve staff tiers
+    recalculate_all_metrics_and_resolve_tiers(conn)
 
-    print("\n[4/5] サマリー集計 & Gzip 圧縮中...")
+    print("\n[5/6] サマリー集計 & Gzip 圧縮中...")
     cursor.execute("SELECT COUNT(*) FROM works")
     total_works = cursor.fetchone()[0]
     cursor.execute("SELECT COUNT(DISTINCT name) FROM leaderboards WHERE role != 'cv'")
@@ -791,7 +1211,8 @@ def main():
         total_staff = ?,
         total_cv = ?,
         updated_at = ?,
-        year_max = ?
+        year_max = ?,
+        version = '2.2.0'
     """, (total_works, total_staff, total_cv, now_str, current_year))
     conn.commit()
 
@@ -807,7 +1228,7 @@ def main():
     print(f"  -> Gzip圧縮完了: {gz_size / (1024*1024):.2f} MB (SHA-256: {sha256_hash[:12]}...)")
 
     version_info = {
-        "version": "1.4.0",
+        "version": "1.5.0",
         "updatedAt": now_str,
         "totalWorks": int(total_works),
         "totalStaff": int(total_staff),
@@ -823,10 +1244,15 @@ def main():
     with open(version_json_path, "w", encoding="utf-8") as f:
         json.dump(version_info, f, ensure_ascii=False, indent=2)
 
-    print(f"[5/5] version.json を最新化しました: {version_json_path.name}")
-    print("===========================================================")
-    print("  週次自動更新が正常に完了しました！")
-    print("===========================================================")
+    if work_covers:
+        with open(covers_json_path, "w", encoding="utf-8") as fc:
+            json.dump(work_covers, fc, ensure_ascii=False)
+        print(f"  -> work_covers.json を更新しました ({len(work_covers)} 件)")
+
+    print(f"[6/6] version.json を最新化しました: {version_json_path.name}")
+    print("=================================================================")
+    print("  週次自動更新・放送中アニメ動的追跡が正常に完了しました！")
+    print("=================================================================")
 
 if __name__ == "__main__":
     main()
