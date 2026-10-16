@@ -192,15 +192,22 @@ def sanitize_staff_dict(s_map: dict) -> tuple[dict, bool]:
             continue
         if isinstance(persons, list):
             dedup_list = []
-            seen_names = set()
+            name_to_item = {}
             for p in persons:
                 p_name = (p.get("name") if isinstance(p, dict) else str(p) or "").strip()
                 if p_name:
-                    if p_name not in seen_names:
-                        dedup_list.append(p if isinstance(p, dict) else {"name": p_name, "rt": "B", "ct": "B"})
-                        seen_names.add(p_name)
+                    p_obj = dict(p) if isinstance(p, dict) else {"name": p_name, "rt": "B", "ct": "B"}
+                    if p_name not in name_to_item:
+                        name_to_item[p_name] = p_obj
+                        dedup_list.append(p_obj)
                     else:
                         changed = True
+                        # If duplicate in genga, keep the higher weight (1.0 over 0.2)
+                        existing_obj = name_to_item[p_name]
+                        w_old = float(existing_obj.get("w", 1.0))
+                        w_new = float(p_obj.get("w", 1.0))
+                        if w_new > w_old:
+                            existing_obj.pop("w", None)
             cleaned[role] = dedup_list
 
     # Merge storyboard into unit_director without duplicates
@@ -232,12 +239,20 @@ def merge_staff_dicts(old_json_str: str, new_dict: dict) -> dict:
     clean_new, _ = sanitize_staff_dict(new_dict or {})
     for role, persons in clean_new.items():
         existing = merged.setdefault(role, [])
-        existing_names = {(x.get("name") if isinstance(x, dict) else str(x) or "").strip() for x in existing}
+        name_to_existing = {(x.get("name") if isinstance(x, dict) else str(x) or "").strip(): x for x in existing if isinstance(x, dict)}
         for p in persons:
             p_name = (p.get("name") if isinstance(p, dict) else str(p) or "").strip()
-            if p_name and p_name not in existing_names:
-                existing.append(p if isinstance(p, dict) else {"name": p_name, "rt": "B", "ct": "B"})
-                existing_names.add(p_name)
+            if not p_name:
+                continue
+            p_obj = dict(p) if isinstance(p, dict) else {"name": p_name, "rt": "B", "ct": "B"}
+            if p_name not in name_to_existing:
+                existing.append(p_obj)
+                name_to_existing[p_name] = p_obj
+            else:
+                # Upgrade from 2nd genga (w=0.2) to 1st genga (w=1.0) if newly credited as 1st genga
+                ex_obj = name_to_existing[p_name]
+                if float(p_obj.get("w", 1.0)) > float(ex_obj.get("w", 1.0)):
+                    ex_obj.pop("w", None)
     return merged
 
 def merge_cast_lists(old_json_str: str, new_list: list) -> list:
@@ -512,13 +527,21 @@ def fetch_bangumi_staff_and_cast(title_jp: str, subject_id: int = None):
             if res.status == 200:
                 persons = json.loads(res.read().decode("utf-8"))
                 for p in persons:
-                    r_name = p.get("relation", "")
+                    r_name = p.get("relation", "").strip()
                     p_name = p.get("name", "").strip()
                     role_key = RELATION_MAP.get(r_name)
                     if role_key and p_name:
                         existing = staff_by_role.setdefault(role_key, [])
-                        if not any(x["name"] == p_name for x in existing):
-                            existing.append({"name": p_name, "rt": "B", "ct": "B"})
+                        ex_item = next((x for x in existing if x["name"] == p_name), None)
+                        is_second_genga = (r_name == "第二原画")
+                        if not ex_item:
+                            entry = {"name": p_name, "rt": "B", "ct": "B"}
+                            if is_second_genga:
+                                entry["w"] = 0.2
+                            existing.append(entry)
+                        elif not is_second_genga and "w" in ex_item:
+                            # Upgrade from 2nd genga (w=0.2) to 1st genga (w=1.0)
+                            ex_item.pop("w", None)
 
         # 2. Fetch Characters & Cast
         chars_url = f"{BANGUMI_ENDPOINT}/v0/subjects/{subject_id}/characters"
@@ -642,7 +665,8 @@ def recalculate_all_metrics_and_resolve_tiers(conn):
                         name = g.get("name") if isinstance(g, dict) else str(g)
                         name = name.strip() if name else ""
                         if name:
-                            rec = {"work_id": wid, "title": title, "year": year, "role": "genga", "z": z, "w": 1.0}
+                            w_val = float(g.get("w", 1.0)) if isinstance(g, dict) else 1.0
+                            rec = {"work_id": wid, "title": title, "year": year, "role": "genga", "z": z, "w": w_val}
                             staff_overall[name].append(rec)
                             staff_by_role[("genga", name)].append(rec)
             except:
