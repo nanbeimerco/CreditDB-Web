@@ -491,7 +491,8 @@ export const CreditRepository = {
     limit: number = 50,
     offset: number = 0,
     debutMin?: number,
-    debutMax?: number
+    debutMax?: number,
+    crossTierFilter: string = 'all'
   ): LeaderboardItem[] {
     const db = getDatabase();
     const [, titleToEnMap] = getWorkTitleEnMaps();
@@ -589,7 +590,7 @@ export const CreditRepository = {
 
     // 全役職で検索クエリがある場合、マッチするスタジオを先頭に統合
     const matchedStudios: LeaderboardItem[] = [];
-    if (role === 'all' && query.trim() && offset === 0 && debutMin === undefined && debutMax === undefined) {
+    if (role === 'all' && query.trim() && offset === 0 && debutMin === undefined && debutMax === undefined && crossTierFilter === 'all') {
       try {
         const qNorm = normalizeText(query.trim());
         const hasLatin = /[a-zA-Z]/.test(query);
@@ -639,6 +640,15 @@ export const CreditRepository = {
 
     const conditions: string[] = ['role = ?'];
     const args: any[] = [role];
+
+    if (crossTierFilter && crossTierFilter !== 'all') {
+      if (sortOption === 'CUMULATIVE') {
+        conditions.push('rating_tier = ?');
+      } else {
+        conditions.push('cumulative_tier = ?');
+      }
+      args.push(crossTierFilter);
+    }
 
     if (hasLbFirstYear) {
       if (debutMin !== undefined && debutMin > 0) {
@@ -725,7 +735,9 @@ export const CreditRepository = {
     role: string = 'all',
     query: string = '',
     debutMin?: number,
-    debutMax?: number
+    debutMax?: number,
+    sortOption: StaffSortOption = 'RATING',
+    crossTierFilter: string = 'all'
   ): number {
     const db = getDatabase();
 
@@ -781,6 +793,15 @@ export const CreditRepository = {
 
     const conditions: string[] = ['role = ?'];
     const args: any[] = [role];
+
+    if (crossTierFilter && crossTierFilter !== 'all') {
+      if (sortOption === 'CUMULATIVE') {
+        conditions.push('rating_tier = ?');
+      } else {
+        conditions.push('cumulative_tier = ?');
+      }
+      args.push(crossTierFilter);
+    }
 
     if (hasLbFirstYear) {
       if (debutMin !== undefined && debutMin > 0) {
@@ -1170,6 +1191,7 @@ export const CreditRepository = {
         art_dir: 1.5,
         music: 1.5,
         genga: 1.0,
+        genga_2nd: 0.2,
         cv: 0.8
       };
 
@@ -1197,7 +1219,7 @@ export const CreditRepository = {
           try {
             const sMap = JSON.parse(staffJson);
             for (const [role, members] of Object.entries(sMap)) {
-              if (role === 'studio') continue;
+              if (role === 'studio' || !(role in ROLE_WEIGHTS)) continue;
               const mList = Array.isArray(members) ? members : [members];
               const weight = ROLE_WEIGHTS[role] || 0.5;
 

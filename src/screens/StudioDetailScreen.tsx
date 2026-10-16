@@ -25,6 +25,7 @@ const DEPARTMENTS: { key: string; labelJa: string; labelEn: string }[] = [
   { key: 'all', labelJa: '全体', labelEn: 'All' },
   { key: 'sakkan', labelJa: '作画監督', labelEn: 'Animation' },
   { key: 'genga', labelJa: '原画', labelEn: 'Key Anim' },
+  { key: 'genga_2nd', labelJa: '2原', labelEn: '2nd KA' },
   { key: 'director', labelJa: '監督', labelEn: 'Director' },
   { key: 'unit_director', labelJa: '演出・絵コンテ', labelEn: 'Episode Dir' },
   { key: 'char_design', labelJa: 'キャラデザ', labelEn: 'Ch. Design' },

@@ -37,6 +37,7 @@ export const StaffScreen: React.FC<StaffScreenProps> = (props) => {
   const [totalCount, setTotalCount] = useState<number>(0);
   const [selectedRole, setSelectedRole] = useState<RoleType>('all');
   const [debutEra, setDebutEra] = useState<DebutEraFilter>('all');
+  const [crossTierFilter, setCrossTierFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortOption, setSortOption] = useState<StaffSortOption>('RATING');
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -44,6 +45,7 @@ export const StaffScreen: React.FC<StaffScreenProps> = (props) => {
 
   const isEn = LanguageManager.isEnglish;
   const roles: RoleType[] = ['all', ...ROLE_ORDER];
+  const tierOptions = ['all', 'S+', 'S', 'A+', 'A', 'B+', 'B', 'C', 'D'] as const;
 
   const loadInitialItems = useCallback(() => {
     setIsLoading(true);
@@ -56,9 +58,17 @@ export const StaffScreen: React.FC<StaffScreenProps> = (props) => {
         50,
         0,
         debutMin,
-        debutMax
+        debutMax,
+        crossTierFilter
       );
-      const count = CreditRepository.getLeaderboardCount(selectedRole, searchQuery, debutMin, debutMax);
+      const count = CreditRepository.getLeaderboardCount(
+        selectedRole,
+        searchQuery,
+        debutMin,
+        debutMax,
+        sortOption,
+        crossTierFilter
+      );
       setItems(data);
       setTotalCount(count);
     } catch (e) {
@@ -66,7 +76,7 @@ export const StaffScreen: React.FC<StaffScreenProps> = (props) => {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedRole, searchQuery, sortOption, debutEra]);
+  }, [selectedRole, searchQuery, sortOption, debutEra, crossTierFilter]);
 
   useEffect(() => {
     loadInitialItems();
@@ -86,7 +96,8 @@ export const StaffScreen: React.FC<StaffScreenProps> = (props) => {
             50,
             items.length,
             debutMin,
-            debutMax
+            debutMax,
+            crossTierFilter
           );
           setItems((prev) => [...prev, ...more]);
         } catch (err) {
@@ -112,7 +123,7 @@ export const StaffScreen: React.FC<StaffScreenProps> = (props) => {
         }
       />
 
-      {/* 2. 10部門+スタジオ 水平スクロールセレクター */}
+      {/* 2. 部門+スタジオ 水平スクロールセレクター */}
       <div className="flex items-center gap-1.5 px-3 py-1 overflow-x-auto no-scrollbar border-b border-outlineVariant/20 flex-shrink-0">
         {roles.map((rKey) => {
           const isSelected = selectedRole === rKey;
@@ -156,6 +167,34 @@ export const StaffScreen: React.FC<StaffScreenProps> = (props) => {
           );
         })}
       </div>
+
+      {/* 2.8. もう片方の指標のTier指定フィルター (総合実力順のときは生涯累計実績Tier、生涯累計実績順のときは総合実力Tier) */}
+      {selectedRole !== 'studio' && (
+        <div className="flex items-center gap-1.5 px-3 py-1 overflow-x-auto no-scrollbar border-b border-outlineVariant/20 flex-shrink-0 bg-surfaceContainer/50">
+          <span className="text-[11px] font-bold text-primary px-1 whitespace-nowrap flex-shrink-0">
+            {sortOption === 'CUMULATIVE'
+              ? isEn ? 'Power S(a) Tier:' : '総合実力Tier指定:'
+              : isEn ? 'Career ΣZ Tier:' : '生涯累計実績Tier指定:'}
+          </span>
+          {tierOptions.map((tier) => {
+            const isSelected = crossTierFilter === tier;
+            const label = tier === 'all' ? (isEn ? 'All Tiers' : '全Tier') : tier;
+            return (
+              <button
+                key={tier}
+                onClick={() => setCrossTierFilter(tier)}
+                className={`px-2.5 py-0.5 rounded-full text-xs font-bold whitespace-nowrap border transition-colors flex-shrink-0 ${
+                  isSelected
+                    ? 'bg-primary text-onPrimary border-primary shadow-sm'
+                    : 'bg-surface border-outlineVariant/30 text-onSurfaceVariant hover:text-onSurface'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* 3. スリムステータスバー (件数 & ソートセレクター) */}
       <div className="flex items-center justify-between px-4 py-1.5 text-xs text-onSurfaceVariant border-b border-outlineVariant/20">

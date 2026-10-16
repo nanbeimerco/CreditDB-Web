@@ -45,6 +45,7 @@ DEFAULT_ROLE_M = {
     "sakkan": 4.0,
     "art_dir": 4.0,
     "genga": 6.0,
+    "genga_2nd": 6.0,
     "cv": 6.0,
     "all": 6.0,
 }
@@ -65,7 +66,7 @@ RELATION_MAP = {
     "特效作画监督": "sakkan",
     "动作作画监督": "sakkan",
     "原画": "genga",
-    "第二原画": "genga",
+    "第二原画": "genga_2nd",
     "主动画师": "genga",
     "演出": "unit_director",
     "演出助理": "unit_director",
@@ -176,6 +177,7 @@ EXCLUDED_STAFF_ROLES = {"color_design", "photo_dir", "sound_dir"}
 def sanitize_staff_dict(s_map: dict) -> tuple[dict, bool]:
     """
     Merges 'storyboard' into 'unit_director' without duplicate staff names,
+    separates 2nd Key Animation (w <= 0.25) into 'genga_2nd' vs 1st Key Animation in 'genga',
     excludes 'color_design', 'photo_dir', 'sound_dir', and deduplicates entries per role.
     Returns (cleaned_dict, changed_flag).
     """
@@ -185,32 +187,82 @@ def sanitize_staff_dict(s_map: dict) -> tuple[dict, bool]:
     changed = False
     cleaned = {}
 
-    # First copy all valid roles (excluding storyboard & EXCLUDED_STAFF_ROLES) with deduplication
+    # 1. Copy all non-genga roles (excluding storyboard & EXCLUDED_STAFF_ROLES) with deduplication
     for role, persons in s_map.items():
         if role in EXCLUDED_STAFF_ROLES or role == "storyboard":
             changed = True
             continue
+        if role in ("genga", "genga_2nd"):
+            continue
         if isinstance(persons, list):
             dedup_list = []
-            name_to_item = {}
+            seen_names = set()
             for p in persons:
                 p_name = (p.get("name") if isinstance(p, dict) else str(p) or "").strip()
                 if p_name:
-                    p_obj = dict(p) if isinstance(p, dict) else {"name": p_name, "rt": "B", "ct": "B"}
-                    if p_name not in name_to_item:
-                        name_to_item[p_name] = p_obj
+                    if p_name not in seen_names:
+                        seen_names.add(p_name)
+                        p_obj = dict(p) if isinstance(p, dict) else {"name": p_name, "rt": "B", "ct": "B"}
                         dedup_list.append(p_obj)
                     else:
                         changed = True
-                        # If duplicate in genga, keep the higher weight (1.0 over 0.2)
-                        existing_obj = name_to_item[p_name]
-                        w_old = float(existing_obj.get("w", 1.0))
-                        w_new = float(p_obj.get("w", 1.0))
-                        if w_new > w_old:
-                            existing_obj.pop("w", None)
             cleaned[role] = dedup_list
 
-    # Merge storyboard into unit_director without duplicates
+    # 2. Separate 'genga' (w > 0.25) and 'genga_2nd' (w <= 0.25)
+    g1_list = []
+    g1_names = set()
+    g2_candidates = []
+
+    raw_genga = s_map.get("genga")
+    if isinstance(raw_genga, list):
+        for p in raw_genga:
+            p_name = (p.get("name") if isinstance(p, dict) else str(p) or "").strip()
+            if not p_name:
+                continue
+            p_obj = dict(p) if isinstance(p, dict) else {"name": p_name, "rt": "B", "ct": "B"}
+            w_val = float(p_obj.get("w", 1.0))
+            if w_val <= 0.25:
+                changed = True  # Moving from 'genga' to 'genga_2nd'
+                p_obj["w"] = 0.2
+                g2_candidates.append(p_obj)
+            else:
+                if "w" in p_obj:
+                    p_obj.pop("w", None)
+                    changed = True
+                if p_name not in g1_names:
+                    g1_names.add(p_name)
+                    g1_list.append(p_obj)
+                else:
+                    changed = True
+
+    raw_genga_2nd = s_map.get("genga_2nd")
+    if isinstance(raw_genga_2nd, list):
+        for p in raw_genga_2nd:
+            p_name = (p.get("name") if isinstance(p, dict) else str(p) or "").strip()
+            if not p_name:
+                continue
+            p_obj = dict(p) if isinstance(p, dict) else {"name": p_name, "rt": "B", "ct": "B"}
+            p_obj["w"] = 0.2
+            g2_candidates.append(p_obj)
+
+    g2_list = []
+    g2_names = set()
+    for p_obj in g2_candidates:
+        p_name = p_obj["name"]
+        if p_name in g1_names or p_name in g2_names:
+            changed = True
+            continue
+        g2_names.add(p_name)
+        g2_list.append(p_obj)
+
+    if g1_list or "genga" in s_map:
+        cleaned["genga"] = g1_list
+    if g2_list:
+        cleaned["genga_2nd"] = g2_list
+    elif "genga_2nd" in s_map:
+        changed = True
+
+    # 3. Merge storyboard into unit_director without duplicates
     sb_list = s_map.get("storyboard")
     if isinstance(sb_list, list) and sb_list:
         changed = True
@@ -248,12 +300,8 @@ def merge_staff_dicts(old_json_str: str, new_dict: dict) -> dict:
             if p_name not in name_to_existing:
                 existing.append(p_obj)
                 name_to_existing[p_name] = p_obj
-            else:
-                # Upgrade from 2nd genga (w=0.2) to 1st genga (w=1.0) if newly credited as 1st genga
-                ex_obj = name_to_existing[p_name]
-                if float(p_obj.get("w", 1.0)) > float(ex_obj.get("w", 1.0)):
-                    ex_obj.pop("w", None)
-    return merged
+    final_merged, _ = sanitize_staff_dict(merged)
+    return final_merged
 
 def merge_cast_lists(old_json_str: str, new_list: list) -> list:
     merged = []
@@ -533,15 +581,13 @@ def fetch_bangumi_staff_and_cast(title_jp: str, subject_id: int = None):
                     if role_key and p_name:
                         existing = staff_by_role.setdefault(role_key, [])
                         ex_item = next((x for x in existing if x["name"] == p_name), None)
-                        is_second_genga = (r_name == "第二原画")
+                        is_second_genga = (role_key == "genga_2nd")
                         if not ex_item:
                             entry = {"name": p_name, "rt": "B", "ct": "B"}
                             if is_second_genga:
                                 entry["w"] = 0.2
                             existing.append(entry)
-                        elif not is_second_genga and "w" in ex_item:
-                            # Upgrade from 2nd genga (w=0.2) to 1st genga (w=1.0)
-                            ex_item.pop("w", None)
+        staff_by_role, _ = sanitize_staff_dict(staff_by_role)
 
         # 2. Fetch Characters & Cast
         chars_url = f"{BANGUMI_ENDPOINT}/v0/subjects/{subject_id}/characters"
@@ -661,14 +707,23 @@ def recalculate_all_metrics_and_resolve_tiers(conn):
 
                 genga_list = s_map.get("genga", [])
                 if isinstance(genga_list, list):
-                    for idx, g in enumerate(genga_list, start=1):
+                    for g in genga_list:
                         name = g.get("name") if isinstance(g, dict) else str(g)
                         name = name.strip() if name else ""
                         if name:
-                            w_val = float(g.get("w", 1.0)) if isinstance(g, dict) else 1.0
-                            rec = {"work_id": wid, "title": title, "year": year, "role": "genga", "z": z, "w": w_val}
+                            rec = {"work_id": wid, "title": title, "year": year, "role": "genga", "z": z, "w": 1.0}
                             staff_overall[name].append(rec)
                             staff_by_role[("genga", name)].append(rec)
+
+                genga_2nd_list = s_map.get("genga_2nd", [])
+                if isinstance(genga_2nd_list, list):
+                    for g2 in genga_2nd_list:
+                        name = g2.get("name") if isinstance(g2, dict) else str(g2)
+                        name = name.strip() if name else ""
+                        if name:
+                            rec = {"work_id": wid, "title": title, "year": year, "role": "genga_2nd", "z": z, "w": 0.2}
+                            staff_overall[name].append(rec)
+                            staff_by_role[("genga_2nd", name)].append(rec)
             except:
                 pass
 
@@ -692,9 +747,9 @@ def recalculate_all_metrics_and_resolve_tiers(conn):
     if sanitized_updates:
         cur.executemany("UPDATE works SET staff_json = ? WHERE work_id = ?", sanitized_updates)
         conn.commit()
-        print(f"  -> {len(sanitized_updates)} 作品の staff_json を正規化しました（storyboard -> unit_director 重複なし統合、不要役職除外）。")
+        print(f"  -> {len(sanitized_updates)} 作品の staff_json を正規化しました（原画・2原の分離、storyboard統合、不要役職除外）。")
 
-    roles_list = ["all", "director", "series_comp", "char_design", "unit_director", "sakkan", "genga", "music", "art_dir", "cv"]
+    roles_list = ["all", "director", "series_comp", "char_design", "unit_director", "sakkan", "genga", "genga_2nd", "music", "art_dir", "cv"]
     lb_update_batch = []
 
     for rKey in roles_list:
@@ -1296,7 +1351,7 @@ def main():
         total_cv = ?,
         updated_at = ?,
         year_max = ?,
-        version = '2.2.0'
+        version = '2.3.0'
     """, (total_works, total_staff, total_cv, now_str, current_year))
     conn.commit()
 
@@ -1312,7 +1367,7 @@ def main():
     print(f"  -> Gzip圧縮完了: {gz_size / (1024*1024):.2f} MB (SHA-256: {sha256_hash[:12]}...)")
 
     version_info = {
-        "version": "1.5.0",
+        "version": "1.6.0",
         "updatedAt": now_str,
         "totalWorks": int(total_works),
         "totalStaff": int(total_staff),
@@ -1332,6 +1387,13 @@ def main():
         with open(covers_json_path, "w", encoding="utf-8") as fc:
             json.dump(work_covers, fc, ensure_ascii=False)
         print(f"  -> work_covers.json を更新しました ({len(work_covers)} 件)")
+
+    android_zip_path = web_root.parent / "CreditDB Pro for Android" / "app" / "src" / "main" / "assets" / "creditdb.zip"
+    if android_zip_path.parent.exists():
+        import zipfile
+        with zipfile.ZipFile(android_zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+            zf.writestr("creditdb.db", new_db_bytes)
+        print(f"  -> Android creditdb.zip を同期更新しました ({android_zip_path.stat().st_size / (1024*1024):.2f} MB)")
 
     print(f"[6/6] version.json を最新化しました: {version_json_path.name}")
     print("=================================================================")
